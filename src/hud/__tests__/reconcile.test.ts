@@ -19,6 +19,31 @@ describe('reconcileHudForPromptSubmit', () => {
     assert.equal(result.paneId, null);
   });
 
+  it('skips reconciliation when HUD is disabled', async () => {
+    let listed = false;
+    let created = false;
+
+    const result = await reconcileHudForPromptSubmit('/repo', {
+      env: { TMUX: '1', TMUX_PANE: '%1', OMX_HUD: '0', [OMX_TMUX_HUD_OWNER_ENV]: '1' },
+      listCurrentWindowPanes: () => {
+        listed = true;
+        return [
+          { paneId: '%1', currentCommand: 'codex', startCommand: 'codex' },
+        ];
+      },
+      createHudWatchPane: () => {
+        created = true;
+        return '%hud';
+      },
+      resolveOmxCliEntryPath: () => '/repo/dist/cli/omx.js',
+    });
+
+    assert.equal(result.status, 'skipped_disabled');
+    assert.equal(result.paneId, null);
+    assert.equal(listed, false);
+    assert.equal(created, false);
+  });
+
   it('skips reconciliation in non-OMX-owned tmux even when an entry exists', async () => {
     let listed = false;
     let created = false;

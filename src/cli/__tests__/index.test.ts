@@ -3097,6 +3097,29 @@ describe("tmux HUD pane helpers", () => {
       "node /repo/dist/cli/omx.js hud --watch",
     ]);
   });
+
+  it("createHudWatchPane returns null without tmux calls when HUD is disabled", () => {
+    const previousHud = process.env.OMX_HUD;
+    const calls: string[][] = [];
+    try {
+      process.env.OMX_HUD = "0";
+      const paneId = createSharedHudWatchPane(
+        "/repo",
+        "node /repo/dist/cli/omx.js hud --watch",
+        { heightLines: 3, targetPaneId: "%leader" },
+        (args) => {
+          calls.push(args);
+          return "%hud\n";
+        },
+      );
+
+      assert.equal(paneId, null);
+      assert.deepEqual(calls, []);
+    } finally {
+      if (typeof previousHud === "string") process.env.OMX_HUD = previousHud;
+      else delete process.env.OMX_HUD;
+    }
+  });
 });
 
 describe("detached tmux new-session sequencing", () => {
@@ -3128,6 +3151,31 @@ describe("detached tmux new-session sequencing", () => {
       steps[0]?.args.includes('OMX_NOTIFY_TEMP_CONTRACT={\"active\":true}'),
       true,
     );
+  });
+
+  it("buildDetachedSessionBootstrapSteps omits HUD split when HUD is disabled", () => {
+    const steps = buildDetachedSessionBootstrapSteps(
+      "omx-demo",
+      "/tmp/project",
+      "'codex' '--model' 'gpt-5'",
+      "'node' '/tmp/omx.js' 'hud' '--watch'",
+      "--model gpt-5",
+      "/tmp/codex-home",
+      '{"active":true}',
+      false,
+      "omx-session-test",
+      undefined,
+      undefined,
+      undefined,
+      { OMX_HUD: "0" },
+    );
+
+    assert.deepEqual(
+      steps.map((step) => step.name),
+      ["new-session", "tag-session"],
+    );
+    assert.equal(steps[0]?.args.includes("OMX_TMUX_HUD_OWNER=1"), false);
+    assert.equal(steps[0]?.args.includes("OMX_HUD=0"), true);
   });
 
   it("buildDetachedSessionBootstrapSteps forwards temp contract env to detached tmux session", () => {

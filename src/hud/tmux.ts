@@ -1,6 +1,7 @@
 import { execFileSync } from 'child_process';
 import { existsSync } from 'fs';
 import { HUD_RESIZE_RECONCILE_DELAY_SECONDS, HUD_TMUX_HEIGHT_LINES } from './constants.js';
+import { isHudDisabled } from './opt-out.js';
 import { resolveTmuxBinaryForPlatform } from '../utils/platform-command.js';
 import { resolveOmxCliEntryPath } from '../utils/paths.js';
 
@@ -617,6 +618,8 @@ export function createHudWatchPane(
   } = {},
   execTmuxSync: TmuxExecSync = defaultExecTmuxSync,
 ): string | null {
+  if (isHudDisabled()) return null;
+
   const heightLines = Number.isFinite(options.heightLines) && (options.heightLines ?? 0) > 0
     ? Math.floor(options.heightLines ?? HUD_TMUX_HEIGHT_LINES)
     : HUD_TMUX_HEIGHT_LINES;

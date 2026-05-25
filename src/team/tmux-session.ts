@@ -34,6 +34,7 @@ import { resolveOmxCliEntryPath } from '../utils/paths.js';
 
 const execFileAsync = promisify(execFile);
 import { HUD_RESIZE_RECONCILE_DELAY_SECONDS, HUD_TMUX_TEAM_HEIGHT_LINES } from '../hud/constants.js';
+import { isHudDisabled } from '../hud/opt-out.js';
 import { OMX_TMUX_HUD_OWNER_ENV } from '../hud/reconcile.js';
 import { findHudWatchPaneIds, hudPaneMatchesOwner, OMX_TMUX_HUD_LEADER_PANE_ENV } from '../hud/tmux.js';
 
@@ -1466,7 +1467,8 @@ export function createTeamSession(
     // Team mode prioritizes leader + worker visibility. Remove HUD panes only
     // when we can recreate the team HUD. Otherwise keep the existing HUD alive
     // instead of making it disappear on team startup failures or broken installs.
-    if (canRecreateTeamHud) {
+    const hudDisabled = isHudDisabled();
+    if (canRecreateTeamHud || hudDisabled) {
       for (const hudPaneId of initialHudPaneIds) {
         runTmux(['kill-pane', '-t', hudPaneId]);
       }
@@ -1554,7 +1556,7 @@ export function createTeamSession(
     let hudPaneId: string | null = null;
     let resizeHookName: string | null = null;
     let resizeHookTarget: string | null = null;
-    if (canRecreateTeamHud && omxEntry) {
+    if (!hudDisabled && canRecreateTeamHud && omxEntry) {
       const hudCmd = `exec env ${formatHudEnvAssignments(process.env, { sessionId: ownerSessionId, leaderPaneId })} node ${shellQuoteSingle(translatePathForMsys(omxEntry))} hud --watch`;
       const hudCwd = translatePathForMsys(cwd);
       const hudResult = runTmux([
@@ -1676,6 +1678,8 @@ export function restoreStandaloneHudPane(
   cwd: string,
   options: RestoreStandaloneHudPaneOptions = {},
 ): string | null {
+  if (isHudDisabled()) return null;
+
   const normalizedLeaderPaneId = normalizePaneTarget(leaderPaneId);
   if (!normalizedLeaderPaneId) return null;
 

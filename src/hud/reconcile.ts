@@ -1,6 +1,7 @@
 import { readAllState, readHudConfig } from './state.js';
 import { getHudRenderMaxLines } from './render.js';
 import { HUD_TMUX_HEIGHT_LINES, isTmuxWindowTooCrampedForHudSplit } from './constants.js';
+import { isHudDisabled } from './opt-out.js';
 import {
   buildHudWatchCommand,
   createHudWatchPane,
@@ -116,6 +117,7 @@ export interface ReconcileHudForPromptSubmitResult {
     | 'skipped_not_omx_owned_tmux'
     | 'skipped_no_session_id'
     | 'skipped_window_too_cramped'
+    | 'skipped_disabled'
     | 'unchanged'
     | 'resized'
     | 'recreated'
@@ -230,6 +232,15 @@ export async function reconcileHudForPromptSubmit(
   if (!env.TMUX) {
     return {
       status: 'skipped_not_tmux',
+      paneId: null,
+      desiredHeight: null,
+      duplicateCount: 0,
+    };
+  }
+
+  if (isHudDisabled(env)) {
+    return {
+      status: 'skipped_disabled',
       paneId: null,
       desiredHeight: null,
       duplicateCount: 0,

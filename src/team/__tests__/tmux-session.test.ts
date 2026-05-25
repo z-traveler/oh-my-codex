@@ -4753,6 +4753,47 @@ esac
     }
   });
 
+  it('does not restore standalone HUD panes when HUD is disabled', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omx-standalone-disabled-hud-'));
+    const previousHud = process.env.OMX_HUD;
+    const previousEntryPath = process.env[OMX_ENTRY_PATH_ENV];
+
+    try {
+      await withMockTmuxFixture(
+        'omx-tmux-disabled-standalone-hud-',
+        (logPath) => `#!/bin/sh
+set -eu
+printf '%s\\n' "$*" >> "${logPath}"
+case "\${1:-}" in
+  split-window)
+    echo "%44"
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+`,
+        async ({ logPath }) => {
+          process.env.OMX_HUD = '0';
+          process.env[OMX_ENTRY_PATH_ENV] = '/tmp/omx.js';
+
+          const paneId = restoreStandaloneHudPane('%11', cwd);
+          assert.equal(paneId, null);
+
+          const tmuxLog = fs.existsSync(logPath) ? await readFile(logPath, 'utf-8') : '';
+          assert.equal(tmuxLog, '');
+        },
+      );
+    } finally {
+      if (typeof previousHud === 'string') process.env.OMX_HUD = previousHud;
+      else delete process.env.OMX_HUD;
+      if (typeof previousEntryPath === 'string') process.env[OMX_ENTRY_PATH_ENV] = previousEntryPath;
+      else delete process.env[OMX_ENTRY_PATH_ENV];
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('restores standalone HUD panes with the packaged CLI entry when argv1 is not the OMX CLI', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-standalone-noncli-hud-'));
     const previousArgv = process.argv;

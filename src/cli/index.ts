@@ -134,6 +134,7 @@ import { cleanCodexModelAvailabilityNuxIfNeeded, extractSharedMcpRegistryServers
 import type { UnifiedMcpRegistryServer } from "../config/mcp-registry.js";
 import { OMX_FIRST_PARTY_MCP_SERVER_NAMES } from "../config/omx-first-party-mcp.js";
 import { HUD_TMUX_HEIGHT_LINES, HUD_TMUX_MIN_LAUNCH_WINDOW_HEIGHT_LINES, isTmuxWindowTooCrampedForHudSplit } from "../hud/constants.js";
+import { isHudDisabled } from "../hud/opt-out.js";
 import { OMX_TMUX_HUD_OWNER_ENV } from "../hud/reconcile.js";
 import { readUltragoalState } from "../hud/state.js";
 import {
@@ -3968,6 +3969,7 @@ export function buildDetachedSessionBootstrapSteps(
   sqliteHomeOverride?: string,
   parentEnvFilePath?: string,
 ): DetachedSessionTmuxStep[] {
+  const hudDisabled = isHudDisabled(env);
   const detachedLeaderCmd = nativeWindows
     ? "powershell.exe"
     : buildDetachedSessionLeaderCommand(
@@ -4012,7 +4014,12 @@ export function buildDetachedSessionBootstrapSteps(
     ...(workerLaunchArgs
       ? ["-e", `${TEAM_WORKER_LAUNCH_ARGS_ENV}=${workerLaunchArgs}`]
       : []),
-    ...Object.entries(hudRuntimeEnv).map(([key, value]) => ["-e", `${key}=${value}`]).flat(),
+    ...Object.entries(hudRuntimeEnv)
+      .filter(([key]) => !hudDisabled || key !== OMX_TMUX_HUD_OWNER_ENV)
+      .map(([key, value]) => ["-e", `${key}=${value}`])
+      .flat(),
+    ...(env.OMX_HUD ? ["-e", `OMX_HUD=${env.OMX_HUD}`] : []),
+    ...(env.OMX_DISABLE_HUD ? ["-e", `OMX_DISABLE_HUD=${env.OMX_DISABLE_HUD}`] : []),
     ...(codexHomeOverride ? ["-e", `CODEX_HOME=${codexHomeOverride}`] : []),
     ...(sqliteHomeOverride ? ["-e", `${CODEX_SQLITE_HOME_ENV}=${sqliteHomeOverride}`] : []),
     ...(env.OMXBOX_ACTIVE ? ["-e", `OMXBOX_ACTIVE=${env.OMXBOX_ACTIVE}`] : []),
@@ -4047,7 +4054,7 @@ export function buildDetachedSessionBootstrapSteps(
           },
         ]
       : []),
-    { name: "split-and-capture-hud-pane", args: splitCaptureArgs },
+    ...(!hudDisabled ? [{ name: "split-and-capture-hud-pane" as const, args: splitCaptureArgs }] : []),
   ];
 }
 
@@ -4804,12 +4811,17 @@ function runCodex(
   }
   const omxRootOverride = resolveOmxRootForLaunch(cwd, process.env);
   const currentPaneId = process.env.TMUX_PANE;
+  const hudDisabled = isHudDisabled();
   const hudRuntimeRoot = resolveHudRuntimeRootForLaunch(cwd, process.env);
-  const hudEnvArgs = Object.entries(buildHudRuntimeEnv({
+  const hudRuntimeEnv = buildHudRuntimeEnv({
     sessionId,
     leaderPaneId: currentPaneId,
     ...hudRuntimeRoot,
-  }).env).map(([key, value]) => `${key}=${value}`);
+  }).env;
+  const hudEnvArgs = Object.entries(hudRuntimeEnv).map(([key, value]) => `${key}=${value}`);
+  const codexHudRuntimeEnv = Object.fromEntries(
+    Object.entries(hudRuntimeEnv).filter(([key]) => !hudDisabled || key !== OMX_TMUX_HUD_OWNER_ENV),
+  );
   const hudCmd = nativeWindows
     ? buildWindowsPromptCommand("node", [omxBin, "hud", "--watch"])
     : buildTmuxPaneCommand("env", [...hudEnvArgs, "node", omxBin, "hud", "--watch"]);
@@ -4832,7 +4844,7 @@ function runCodex(
   );
   const codexEnvWithSession = {
     ...codexBaseEnv,
-    ...buildHudRuntimeEnv({ sessionId }).env,
+    ...codexHudRuntimeEnv,
   };
   const codexEnv = workerLaunchArgs
     ? { ...codexEnvWithSession, [TEAM_WORKER_LAUNCH_ARGS_ENV]: workerLaunchArgs }
@@ -4875,47 +4887,49 @@ function runCodex(
       killTmuxPane(paneId);
     }
 
-    if (keeperHudPaneId) {
-      hudPaneId = keeperHudPaneId;
-      try {
-        resizeTmuxPane(hudPaneId, HUD_TMUX_HEIGHT_LINES);
-        registerInsideTmuxHudResizeHook({
-          hudPaneId,
-          currentPaneId,
-          cwd,
-          sessionId,
-          omxRootOverride,
-        });
-      } catch (err) {
-        logCliOperationFailure(err);
-      }
-    } else if (
-      isExistingTmuxWindowTooCrampedForLaunchHud(
-        readCurrentWindowSize(undefined, currentPaneId).height,
-      )
-    ) {
-      // Existing tmux window is height-constrained: forcing a launch-time HUD
-      // split here would steal rows from the Codex TUI and make the
-      // transcript/input area unreadable. Skip the split at launch; the
-      // prompt-submit reconcile path can add the HUD later when there is room.
-      // (closes #2754)
-      hudPaneId = null;
-    } else {
-      try {
-        hudPaneId = createHudWatchPane(cwd, hudCmd, {
-          heightLines: HUD_TMUX_HEIGHT_LINES,
-          targetPaneId: currentPaneId,
-        });
-        registerInsideTmuxHudResizeHook({
-          hudPaneId,
-          currentPaneId,
-          cwd,
-          sessionId,
-          omxRootOverride,
-        });
-      } catch (err) {
-        logCliOperationFailure(err);
-        // HUD split failed, continue without it
+    if (!hudDisabled) {
+      if (keeperHudPaneId) {
+        hudPaneId = keeperHudPaneId;
+        try {
+          resizeTmuxPane(hudPaneId, HUD_TMUX_HEIGHT_LINES);
+          registerInsideTmuxHudResizeHook({
+            hudPaneId,
+            currentPaneId,
+            cwd,
+            sessionId,
+            omxRootOverride,
+          });
+        } catch (err) {
+          logCliOperationFailure(err);
+        }
+      } else if (
+        isExistingTmuxWindowTooCrampedForLaunchHud(
+          readCurrentWindowSize(undefined, currentPaneId).height,
+        )
+      ) {
+        // Existing tmux window is height-constrained: forcing a launch-time HUD
+        // split here would steal rows from the Codex TUI and make the
+        // transcript/input area unreadable. Skip the split at launch; the
+        // prompt-submit reconcile path can add the HUD later when there is room.
+        // (closes #2754)
+        hudPaneId = null;
+      } else {
+        try {
+          hudPaneId = createHudWatchPane(cwd, hudCmd, {
+            heightLines: HUD_TMUX_HEIGHT_LINES,
+            targetPaneId: currentPaneId,
+          });
+          registerInsideTmuxHudResizeHook({
+            hudPaneId,
+            currentPaneId,
+            cwd,
+            sessionId,
+            omxRootOverride,
+          });
+        } catch (err) {
+          logCliOperationFailure(err);
+          // HUD split failed, continue without it
+        }
       }
     }
 
