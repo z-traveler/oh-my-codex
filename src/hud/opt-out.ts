@@ -10,5 +10,9 @@ export function isHudDisabled(env: NodeJS.ProcessEnv = process.env): boolean {
   if (DISABLED_VALUES.has(hudValue)) return true;
 
   const disableHudValue = normalizedEnvValue(env.OMX_DISABLE_HUD);
-  return ENABLED_DISABLE_VALUES.has(disableHudValue);
+  if (ENABLED_DISABLE_VALUES.has(disableHudValue)) return true;
+  if (ENABLED_DISABLE_VALUES.has(hudValue)) return false;
+  if (DISABLED_VALUES.has(disableHudValue)) return false;
+
+  return true;
 }

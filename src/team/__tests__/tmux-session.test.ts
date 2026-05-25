@@ -3442,6 +3442,7 @@ esac
     const prevTmuxPane = process.env.TMUX_PANE;
     const prevSessionId = process.env.OMX_SESSION_ID;
     const prevWorkerCli = process.env.OMX_TEAM_WORKER_CLI;
+    const prevHud = process.env.OMX_HUD;
     try {
       await withMockTmuxFixture(
         'omx-tmux-pane-tags-',
@@ -3504,6 +3505,7 @@ esac
           process.env.TMUX_PANE = '%1';
           process.env.OMX_SESSION_ID = 'omx-pane-scope';
           process.env.OMX_TEAM_WORKER_CLI = 'gemini';
+          process.env.OMX_HUD = '1';
 
           const session = createTeamSession('Pane Tags', 1, cwd);
           assert.equal(session.name, 'shared:0');
@@ -3541,6 +3543,7 @@ esac
     const prevTmuxPane = process.env.TMUX_PANE;
     const prevSessionId = process.env.OMX_SESSION_ID;
     const prevWorkerCli = process.env.OMX_TEAM_WORKER_CLI;
+    const prevHud = process.env.OMX_HUD;
     try {
       await withMockTmuxFixture(
         'omx-tmux-hud-session-boundary-',
@@ -3640,6 +3643,7 @@ esac
     const prevTmuxPane = process.env.TMUX_PANE;
     const prevSessionId = process.env.OMX_SESSION_ID;
     const prevWorkerCli = process.env.OMX_TEAM_WORKER_CLI;
+    const prevHud = process.env.OMX_HUD;
     try {
       await withMockTmuxFixture(
         'omx-tmux-owned-hud-startup-',
@@ -3705,6 +3709,7 @@ esac
           process.env.TMUX_PANE = '%1';
           process.env.OMX_SESSION_ID = 'leader-session-a';
           process.env.OMX_TEAM_WORKER_CLI = 'gemini';
+          process.env.OMX_HUD = '1';
 
           const session = createTeamSession('Owned HUD Startup', 1, cwd);
           assert.equal(session.leaderPaneId, '%1');
@@ -3725,6 +3730,8 @@ esac
       else delete process.env.OMX_SESSION_ID;
       if (typeof prevWorkerCli === 'string') process.env.OMX_TEAM_WORKER_CLI = prevWorkerCli;
       else delete process.env.OMX_TEAM_WORKER_CLI;
+      if (typeof prevHud === 'string') process.env.OMX_HUD = prevHud;
+      else delete process.env.OMX_HUD;
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -3734,6 +3741,7 @@ esac
     const prevTmux = process.env.TMUX;
     const prevTmuxPane = process.env.TMUX_PANE;
     const prevWorkerCli = process.env.OMX_TEAM_WORKER_CLI;
+    const prevHud = process.env.OMX_HUD;
     const prevWarn = console.warn;
     const warnings: string[] = [];
 
@@ -3813,6 +3821,7 @@ esac
           process.env.TMUX = 'leader-session,stub,0';
           process.env.TMUX_PANE = '%1';
           process.env.OMX_TEAM_WORKER_CLI = 'gemini';
+          process.env.OMX_HUD = '1';
           console.warn = (...args: unknown[]) => { warnings.push(args.map(String).join(' ')); };
 
           const session = createTeamSession('Resize Hook Fallback', 1, cwd);
@@ -3840,6 +3849,8 @@ esac
       else delete process.env.TMUX_PANE;
       if (typeof prevWorkerCli === 'string') process.env.OMX_TEAM_WORKER_CLI = prevWorkerCli;
       else delete process.env.OMX_TEAM_WORKER_CLI;
+      if (typeof prevHud === 'string') process.env.OMX_HUD = prevHud;
+      else delete process.env.OMX_HUD;
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -3935,6 +3946,7 @@ describe('native Windows HUD reconciliation', () => {
     const prevTmux = process.env.TMUX;
     const prevTmuxPane = process.env.TMUX_PANE;
     const prevWorkerCli = process.env.OMX_TEAM_WORKER_CLI;
+    const prevHud = process.env.OMX_HUD;
     const prevMsystem = process.env.MSYSTEM;
     const prevOstype = process.env.OSTYPE;
     const prevWsl = process.env.WSL_DISTRO_NAME;
@@ -4002,6 +4014,7 @@ esac
           delete process.env.TMUX;
           delete process.env.TMUX_PANE;
           process.env.OMX_TEAM_WORKER_CLI = 'gemini';
+          process.env.OMX_HUD = '1';
           delete process.env.MSYSTEM;
           delete process.env.OSTYPE;
           delete process.env.WSL_DISTRO_NAME;
@@ -4028,6 +4041,8 @@ esac
       else delete process.env.TMUX_PANE;
       if (typeof prevWorkerCli === 'string') process.env.OMX_TEAM_WORKER_CLI = prevWorkerCli;
       else delete process.env.OMX_TEAM_WORKER_CLI;
+      if (typeof prevHud === 'string') process.env.OMX_HUD = prevHud;
+      else delete process.env.OMX_HUD;
       if (typeof prevMsystem === 'string') process.env.MSYSTEM = prevMsystem;
       else delete process.env.MSYSTEM;
       if (typeof prevOstype === 'string') process.env.OSTYPE = prevOstype;
@@ -4045,6 +4060,7 @@ esac
     const prevTmux = process.env.TMUX;
     const prevTmuxPane = process.env.TMUX_PANE;
     const prevWorkerCli = process.env.OMX_TEAM_WORKER_CLI;
+    const prevHud = process.env.OMX_HUD;
     const prevMsystem = process.env.MSYSTEM;
     const prevOstype = process.env.OSTYPE;
     const prevWsl = process.env.WSL_DISTRO_NAME;
@@ -4115,6 +4131,7 @@ esac
           process.env.TMUX = 'leader-session,stub,0';
           process.env.TMUX_PANE = '%1';
           process.env.OMX_TEAM_WORKER_CLI = 'gemini';
+          process.env.OMX_HUD = '1';
           delete process.env.MSYSTEM;
           delete process.env.OSTYPE;
           delete process.env.WSL_DISTRO_NAME;
@@ -4143,6 +4160,8 @@ esac
       else delete process.env.TMUX_PANE;
       if (typeof prevWorkerCli === 'string') process.env.OMX_TEAM_WORKER_CLI = prevWorkerCli;
       else delete process.env.OMX_TEAM_WORKER_CLI;
+      if (typeof prevHud === 'string') process.env.OMX_HUD = prevHud;
+      else delete process.env.OMX_HUD;
       if (typeof prevMsystem === 'string') process.env.MSYSTEM = prevMsystem;
       else delete process.env.MSYSTEM;
       if (typeof prevOstype === 'string') process.env.OSTYPE = prevOstype;
@@ -4269,6 +4288,7 @@ esac
   it('restores standalone HUD panes with direct resize on native Windows', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-standalone-win32-hud-'));
     const prevLeaderNodePath = process.env.OMX_LEADER_NODE_PATH;
+    const prevHud = process.env.OMX_HUD;
     const prevMsystem = process.env.MSYSTEM;
     const prevOstype = process.env.OSTYPE;
     const prevWsl = process.env.WSL_DISTRO_NAME;
@@ -4303,6 +4323,7 @@ esac
           delete process.env.WSL_DISTRO_NAME;
           delete process.env.WSL_INTEROP;
           process.env.OMX_LEADER_NODE_PATH = 'C:\\Program Files\\nodejs\\node.exe';
+          process.env.OMX_HUD = '1';
           Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
 
           const paneId = restoreStandaloneHudPane('%11', cwd);
@@ -4321,6 +4342,8 @@ esac
       if (origPlatform) Object.defineProperty(process, 'platform', origPlatform);
       if (typeof prevLeaderNodePath === 'string') process.env.OMX_LEADER_NODE_PATH = prevLeaderNodePath;
       else delete process.env.OMX_LEADER_NODE_PATH;
+      if (typeof prevHud === 'string') process.env.OMX_HUD = prevHud;
+      else delete process.env.OMX_HUD;
       if (typeof prevMsystem === 'string') process.env.MSYSTEM = prevMsystem;
       else delete process.env.MSYSTEM;
       if (typeof prevOstype === 'string') process.env.OSTYPE = prevOstype;
@@ -4702,6 +4725,7 @@ esac
     const startupCwd = await mkdtemp(join(tmpdir(), 'omx-standalone-relative-start-'));
     const previousEntryPath = process.env[OMX_ENTRY_PATH_ENV];
     const previousStartupCwd = process.env[OMX_STARTUP_CWD_ENV];
+    const previousHud = process.env.OMX_HUD;
     const previousArgv = process.argv;
 
     try {
@@ -4731,6 +4755,7 @@ esac
         async ({ logPath }) => {
           delete process.env[OMX_ENTRY_PATH_ENV];
           process.env[OMX_STARTUP_CWD_ENV] = startupCwd;
+          process.env.OMX_HUD = '1';
           process.argv = [previousArgv[0] || 'node', 'dist/cli/omx.js'];
 
           const paneId = restoreStandaloneHudPane('%11', cwd);
@@ -4748,6 +4773,8 @@ esac
       else delete process.env[OMX_ENTRY_PATH_ENV];
       if (typeof previousStartupCwd === 'string') process.env[OMX_STARTUP_CWD_ENV] = previousStartupCwd;
       else delete process.env[OMX_STARTUP_CWD_ENV];
+      if (typeof previousHud === 'string') process.env.OMX_HUD = previousHud;
+      else delete process.env.OMX_HUD;
       await rm(cwd, { recursive: true, force: true });
       await rm(startupCwd, { recursive: true, force: true });
     }
@@ -4796,6 +4823,7 @@ esac
 
   it('restores standalone HUD panes with the packaged CLI entry when argv1 is not the OMX CLI', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-standalone-noncli-hud-'));
+    const previousHud = process.env.OMX_HUD;
     const previousArgv = process.argv;
 
     try {
@@ -4818,6 +4846,7 @@ case "\${1:-}" in
 esac
 `,
         async ({ logPath }) => {
+          process.env.OMX_HUD = '1';
           process.argv = [previousArgv[0] || 'node', '/tmp/codex-host-binary'];
 
           const paneId = restoreStandaloneHudPane('%11', cwd);
@@ -4831,6 +4860,8 @@ esac
       );
     } finally {
       process.argv = previousArgv;
+      if (typeof previousHud === 'string') process.env.OMX_HUD = previousHud;
+      else delete process.env.OMX_HUD;
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -4838,6 +4869,7 @@ esac
   it('restores standalone HUD panes with OMX_ROOT forwarded and shell-escaped', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-standalone-root-hud-'));
     const previousOmxRoot = process.env.OMX_ROOT;
+    const previousHud = process.env.OMX_HUD;
 
     try {
       await withMockTmuxFixture(
@@ -4860,6 +4892,7 @@ esac
 `,
         async ({ logPath }) => {
           process.env.OMX_ROOT = "/tmp/boxed root/it's/$(literal)";
+          process.env.OMX_HUD = '1';
 
           const paneId = restoreStandaloneHudPane('%11', cwd);
           assert.equal(paneId, '%44');
@@ -4874,6 +4907,8 @@ esac
     } finally {
       if (typeof previousOmxRoot === 'string') process.env.OMX_ROOT = previousOmxRoot;
       else delete process.env.OMX_ROOT;
+      if (typeof previousHud === 'string') process.env.OMX_HUD = previousHud;
+      else delete process.env.OMX_HUD;
       await rm(cwd, { recursive: true, force: true });
     }
   });

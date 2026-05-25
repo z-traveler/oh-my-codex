@@ -316,15 +316,15 @@ Options:
 
 Launch policy:
   OMX_LAUNCH_POLICY=auto
-                Use the default policy: detached tmux when supported, direct otherwise
+                Use the upstream auto policy: detached tmux when supported, direct otherwise
   OMX_LAUNCH_POLICY=direct
-                Run without OMX tmux/HUD management
+                Run without OMX tmux/HUD management (fork default when unset)
   OMX_LAUNCH_POLICY=tmux
                 Force OMX-managed detached tmux launch
   OMX_LAUNCH_POLICY=detached-tmux
                 Force OMX-managed detached tmux launch
   CLI policy flags (--direct/--tmux) override OMX_LAUNCH_POLICY; the last flag before -- wins.
-  Unset or empty OMX_LAUNCH_POLICY returns to auto/default behavior.
+  Unset or empty OMX_LAUNCH_POLICY defaults to direct in this fork.
   Config files are intentionally not used for launch policy in this release.
 `;
 
@@ -743,7 +743,7 @@ export function resolveEnvLaunchPolicyOverride(
   env: NodeJS.ProcessEnv = process.env,
 ): CodexLaunchPolicy | undefined {
   const rawValue = env[OMX_LAUNCH_POLICY_ENV]?.trim();
-  if (!rawValue) return undefined;
+  if (!rawValue) return "direct";
 
   const value = rawValue.toLowerCase();
   if (value === "auto") return undefined;
@@ -754,10 +754,10 @@ export function resolveEnvLaunchPolicyOverride(
     warnedInvalidEnvLaunchPolicy = true;
     console.warn(
       `[omx] warning: invalid ${OMX_LAUNCH_POLICY_ENV}="${rawValue}". ` +
-        "Expected direct, tmux, detached-tmux, or auto. Falling back to auto/default launch policy.",
+        "Expected direct, tmux, detached-tmux, or auto. Falling back to direct launch policy.",
     );
   }
-  return undefined;
+  return "direct";
 }
 
 export function resolveEffectiveLeaderLaunchPolicyOverride(

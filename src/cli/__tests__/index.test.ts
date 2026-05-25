@@ -612,7 +612,9 @@ describe("resolveLeaderLaunchPolicyOverride", () => {
 });
 
 describe("resolveEnvLaunchPolicyOverride", () => {
-  it("accepts direct, tmux, detached-tmux, auto, and empty policy values", () => {
+  it("defaults to direct and accepts direct, tmux, detached-tmux, and auto policy values", () => {
+    assert.equal(resolveEnvLaunchPolicyOverride({}), "direct");
+    assert.equal(resolveEnvLaunchPolicyOverride({ OMX_LAUNCH_POLICY: "" }), "direct");
     assert.equal(resolveEnvLaunchPolicyOverride({ OMX_LAUNCH_POLICY: "direct" }), "direct");
     assert.equal(
       resolveEnvLaunchPolicyOverride({ OMX_LAUNCH_POLICY: "tmux" }),
@@ -623,24 +625,27 @@ describe("resolveEnvLaunchPolicyOverride", () => {
       "detached-tmux",
     );
     assert.equal(resolveEnvLaunchPolicyOverride({ OMX_LAUNCH_POLICY: "auto" }), undefined);
-    assert.equal(resolveEnvLaunchPolicyOverride({ OMX_LAUNCH_POLICY: "" }), undefined);
   });
 
-  it("warns once for invalid OMX_LAUNCH_POLICY and falls back to auto", () => {
+  it("warns once for invalid OMX_LAUNCH_POLICY and falls back to direct", () => {
     const warn = mock.method(console, "warn", () => {});
     assert.equal(
       resolveEnvLaunchPolicyOverride({ OMX_LAUNCH_POLICY: "banana" }),
-      undefined,
+      "direct",
     );
     assert.equal(
       resolveEnvLaunchPolicyOverride({ OMX_LAUNCH_POLICY: "banana" }),
-      undefined,
+      "direct",
     );
     assert.equal(warn.mock.callCount(), 1);
   });
 });
 
 describe("resolveEffectiveLeaderLaunchPolicyOverride", () => {
+  it("defaults to direct when no CLI policy flag or env policy is present", () => {
+    assert.equal(resolveEffectiveLeaderLaunchPolicyOverride(["--yolo"], {}), "direct");
+  });
+
   it("uses env policy when no CLI policy flag is present", () => {
     assert.equal(
       resolveEffectiveLeaderLaunchPolicyOverride(["--yolo"], {
@@ -1807,12 +1812,12 @@ describe("resolveCliInvocation", () => {
 
   it("advertises concise launch policy controls in top-level help", () => {
     assert.match(HELP, /--direct\s+Launch the interactive leader directly/);
-    assert.match(HELP, /OMX_LAUNCH_POLICY=auto[\s\S]*Use the default policy/);
-    assert.match(HELP, /OMX_LAUNCH_POLICY=direct[\s\S]*Run without OMX tmux\/HUD management/);
+    assert.match(HELP, /OMX_LAUNCH_POLICY=auto[\s\S]*Use the upstream auto policy/);
+    assert.match(HELP, /OMX_LAUNCH_POLICY=direct[\s\S]*Run without OMX tmux\/HUD management \(fork default when unset\)/);
     assert.match(HELP, /OMX_LAUNCH_POLICY=tmux[\s\S]*Force OMX-managed detached tmux launch/);
     assert.match(HELP, /OMX_LAUNCH_POLICY=detached-tmux[\s\S]*Force OMX-managed detached tmux launch/);
     assert.match(HELP, /CLI policy flags \(--direct\/--tmux\) override OMX_LAUNCH_POLICY/);
-    assert.match(HELP, /Unset or empty OMX_LAUNCH_POLICY returns to auto\/default behavior/);
+    assert.match(HELP, /Unset or empty OMX_LAUNCH_POLICY defaults to direct in this fork/);
     assert.match(HELP, /Config files are intentionally not used/);
     assert.doesNotMatch(HELP, /OMX_LAUNCH_POLICY=direct\|tmux\|detached-tmux\|auto/);
     assert.doesNotMatch(HELP, /OMX_LAUNCH_POLICY=direct omx --tmux --yolo/);
@@ -3069,6 +3074,43 @@ describe("tmux HUD pane helpers", () => {
   });
 
   it("createHudWatchPane splits from the emitting pane target when provided", () => {
+    const previousHud = process.env.OMX_HUD;
+    const calls: string[][] = [];
+    try {
+      process.env.OMX_HUD = "1";
+      const paneId = createSharedHudWatchPane(
+        "/repo",
+        "node /repo/dist/cli/omx.js hud --watch",
+        { heightLines: 3, targetPaneId: "%leader" },
+        (args) => {
+          calls.push(args);
+          return "%hud\n";
+        },
+      );
+
+      assert.equal(paneId, "%hud");
+      assert.deepEqual(calls[0], [
+        "split-window",
+        "-v",
+        "-l",
+        "3",
+        "-d",
+        "-t",
+        "%leader",
+        "-c",
+        "/repo",
+        "-P",
+        "-F",
+        "#{pane_id}",
+        "node /repo/dist/cli/omx.js hud --watch",
+      ]);
+    } finally {
+      if (typeof previousHud === "string") process.env.OMX_HUD = previousHud;
+      else delete process.env.OMX_HUD;
+    }
+  });
+
+  it("createHudWatchPane returns null without tmux calls when HUD is disabled", () => {
     const calls: string[][] = [];
     const paneId = createSharedHudWatchPane(
       "/repo",
@@ -3080,45 +3122,8 @@ describe("tmux HUD pane helpers", () => {
       },
     );
 
-    assert.equal(paneId, "%hud");
-    assert.deepEqual(calls[0], [
-      "split-window",
-      "-v",
-      "-l",
-      "3",
-      "-d",
-      "-t",
-      "%leader",
-      "-c",
-      "/repo",
-      "-P",
-      "-F",
-      "#{pane_id}",
-      "node /repo/dist/cli/omx.js hud --watch",
-    ]);
-  });
-
-  it("createHudWatchPane returns null without tmux calls when HUD is disabled", () => {
-    const previousHud = process.env.OMX_HUD;
-    const calls: string[][] = [];
-    try {
-      process.env.OMX_HUD = "0";
-      const paneId = createSharedHudWatchPane(
-        "/repo",
-        "node /repo/dist/cli/omx.js hud --watch",
-        { heightLines: 3, targetPaneId: "%leader" },
-        (args) => {
-          calls.push(args);
-          return "%hud\n";
-        },
-      );
-
-      assert.equal(paneId, null);
-      assert.deepEqual(calls, []);
-    } finally {
-      if (typeof previousHud === "string") process.env.OMX_HUD = previousHud;
-      else delete process.env.OMX_HUD;
-    }
+    assert.equal(paneId, null);
+    assert.deepEqual(calls, []);
   });
 });
 
@@ -3134,6 +3139,10 @@ describe("detached tmux new-session sequencing", () => {
       '{"active":true}',
       false,
       "omx-session-test",
+      undefined,
+      undefined,
+      undefined,
+      { OMX_HUD: "1" },
     );
     assert.deepEqual(
       steps.map((step) => step.name),
@@ -3210,6 +3219,10 @@ describe("detached tmux new-session sequencing", () => {
       null,
       false,
       "sess-detached-managed",
+      undefined,
+      undefined,
+      undefined,
+      { OMX_HUD: "1" },
     );
     const newSession = steps.find((step) => step.name === "new-session");
     const tagSession = steps.find((step) => step.name === "tag-session");
@@ -3907,6 +3920,11 @@ exit 0
       "C:/codex-home",
       null,
       true,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { OMX_HUD: "1" },
     );
     assert.equal(steps[0]?.name, "new-session");
     assert.equal(steps[0]?.args.at(-1), "powershell.exe");
