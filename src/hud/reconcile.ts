@@ -1,7 +1,7 @@
 import { readAllState, readHudConfig } from './state.js';
 import { getHudRenderMaxLines } from './render.js';
 import { HUD_TMUX_HEIGHT_LINES, isTmuxWindowTooCrampedForHudSplit } from './constants.js';
-import { isHudDisabled } from './opt-out.js';
+import { isHudDisabled, isHudExplicitlyDisabled } from './opt-out.js';
 import {
   buildHudWatchCommand,
   createHudWatchPane,
@@ -238,7 +238,7 @@ export async function reconcileHudForPromptSubmit(
     };
   }
 
-  if (isHudDisabled(env)) {
+  if (isHudExplicitlyDisabled(env) || (isHudDisabled(env) && !env.OMX_SESSION_ID?.trim())) {
     return {
       status: 'skipped_disabled',
       paneId: null,

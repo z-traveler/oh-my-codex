@@ -5,13 +5,21 @@ function normalizedEnvValue(value: string | undefined): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
 
-export function isHudDisabled(env: NodeJS.ProcessEnv = process.env): boolean {
+export function isHudExplicitlyDisabled(env: NodeJS.ProcessEnv = process.env): boolean {
   const hudValue = normalizedEnvValue(env.OMX_HUD);
   if (DISABLED_VALUES.has(hudValue)) return true;
 
   const disableHudValue = normalizedEnvValue(env.OMX_DISABLE_HUD);
-  if (ENABLED_DISABLE_VALUES.has(disableHudValue)) return true;
+  return ENABLED_DISABLE_VALUES.has(disableHudValue);
+}
+
+export function isHudDisabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (isHudExplicitlyDisabled(env)) return true;
+
+  const hudValue = normalizedEnvValue(env.OMX_HUD);
   if (ENABLED_DISABLE_VALUES.has(hudValue)) return false;
+
+  const disableHudValue = normalizedEnvValue(env.OMX_DISABLE_HUD);
   if (DISABLED_VALUES.has(disableHudValue)) return false;
 
   return true;

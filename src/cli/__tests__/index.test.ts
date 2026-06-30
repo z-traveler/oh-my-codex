@@ -3341,7 +3341,7 @@ describe("detached tmux new-session sequencing", () => {
       newSession.args.some((arg) => arg === "OMX_STATE_ROOT=/tmp/boxed-state-root"),
       false,
     );
-    assert.equal(newSession.args.some((arg) => arg === "OMX_TMUX_HUD_OWNER=1"), true);
+    assert.equal(newSession.args.some((arg) => arg === "OMX_TMUX_HUD_OWNER=1"), false);
     assert.equal(newSession.args.some((arg) => arg === "OMXBOX_ACTIVE=1"), true);
     assert.equal(
       newSession.args.some((arg) => arg === "OMX_SOURCE_CWD=/tmp/source-project"),
@@ -3745,7 +3745,7 @@ exit 0
     assert.match(source, /const hudRuntimeRoot = resolveHudRuntimeRootForLaunch\(cwd, process\.env\);/);
     assert.match(
       source,
-      /const hudEnvArgs = Object\.entries\(buildHudRuntimeEnv\(\{\s*sessionId,\s*leaderPaneId: currentPaneId,\s*\.\.\.hudRuntimeRoot,\s*\}\)\.env\)\.map\(\(\[key, value\]\) => `\$\{key\}=\$\{value\}`\)/,
+      /const hudRuntimeEnv = buildHudRuntimeEnv\(\{\s*sessionId,\s*leaderPaneId: currentPaneId,\s*\.\.\.hudRuntimeRoot,\s*\}\)\.env;\s*const hudEnvArgs = Object\.entries\(hudRuntimeEnv\)\.map\(\(\[key, value\]\) => `\$\{key\}=\$\{value\}`\)/,
     );
     assert.match(source, /if \(env\.OMX_TEAM_STATE_ROOT\?\.trim\(\)\) return 'team-env';\s*if \(env\.OMX_ROOT\?\.trim\(\) \|\| omxRootOverride\) return 'omx-root-env';\s*if \(env\.OMX_STATE_ROOT\?\.trim\(\)\) return 'omx-state-root-env';/);
     assert.match(

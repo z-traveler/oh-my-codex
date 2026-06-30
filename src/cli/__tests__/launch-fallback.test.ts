@@ -255,6 +255,7 @@ printf 'fake-codex:%s\n' "$*"
         OMX_HOOK_DERIVED_SIGNALS: '0',
         OMX_ROOT: '',
         OMX_STATE_ROOT: '',
+        OMX_HUD: '1',
         TMUX: '',
         TMUX_PANE: '',
       });
@@ -367,6 +368,7 @@ exit 0
       const result = runOmx(wd, ['--tmux', 'bridge prompt'], {
         ...env,
         OMX_HERMES_MCP_BRIDGE: '1',
+        OMX_HUD: '1',
         TMUX: '',
         TMUX_PANE: '',
       });
@@ -458,6 +460,7 @@ exit 0
         OMXBOX_ACTIVE: '1',
         OMX_MADMAX_DETACHED_CONTEXT: 'boxed-context-under-test',
         OMX_LAUNCH_POLICY: 'direct',
+        OMX_HUD: '1',
         TMUX: '',
         TMUX_PANE: '',
       };
@@ -561,6 +564,7 @@ exit 0
         OMXBOX_ACTIVE: '1',
         OMX_MADMAX_DETACHED_CONTEXT: 'boxed-context-under-test',
         OMX_LAUNCH_POLICY: 'direct',
+        OMX_HUD: '1',
         TMUX: '',
         TMUX_PANE: '',
       });
@@ -600,6 +604,7 @@ exit 0
         ...env,
         OMX_RUNS_DIR: runs,
         OMX_LAUNCH_POLICY: 'direct',
+        OMX_HUD: '1',
         TMUX: '',
         TMUX_PANE: '',
       };
@@ -744,6 +749,7 @@ exit 0
           OMX_NOTIFY_FALLBACK: '0',
           OMX_HOOK_DERIVED_SIGNALS: '0',
           OMX_LAUNCH_POLICY: 'direct',
+          OMX_HUD: '1',
           TMUX: '',
           TMUX_PANE: '',
         },
@@ -838,6 +844,7 @@ exit 0
           OMX_AUTO_UPDATE: '0',
           OMX_NOTIFY_FALLBACK: '0',
           OMX_HOOK_DERIVED_SIGNALS: '0',
+          OMX_HUD: '1',
           TMUX: '',
           TMUX_PANE: '',
           CUSTOM_LLM_API_KEY: 'fake-provider-key',
@@ -946,6 +953,7 @@ exit 0
         ['--direct', '--madmax'],
         {
           ...env,
+          OMX_HUD: '1',
           TMUX: '/tmp/tmux-1000/default,123,0',
           TMUX_PANE: '%1',
         },
@@ -980,6 +988,7 @@ case "$1" in
   display-message)
     case "$*" in
       *'#{socket_path}'*) printf '/tmp/tmux-test.sock\n' ;;
+      *'#{window_width}'*) printf '120\t50\n' ;;
       *'#S'*) printf 'managed-session\n' ;;
       *) printf '0\n' ;;
     esac
@@ -1002,6 +1011,8 @@ exit 0
         ['--madmax'],
         {
           ...env,
+          OMX_LAUNCH_POLICY: 'auto',
+          OMX_HUD: '1',
           TMUX: '/tmp/tmux-1000/default,123,0',
           TMUX_PANE: '%1',
         },
@@ -1090,6 +1101,7 @@ exit 0
           OMX_AUTO_UPDATE: '0',
           OMX_NOTIFY_FALLBACK: '0',
           OMX_HOOK_DERIVED_SIGNALS: '0',
+          OMX_HUD: '1',
           TMUX: '',
           TMUX_PANE: '',
         },
@@ -1155,6 +1167,7 @@ exit 1
           OMX_AUTO_UPDATE: '0',
           OMX_NOTIFY_FALLBACK: '0',
           OMX_HOOK_DERIVED_SIGNALS: '0',
+          OMX_HUD: '1',
           TMUX: '',
           TMUX_PANE: '',
         },
@@ -1241,6 +1254,7 @@ exit 0
           OMX_AUTO_UPDATE: '0',
           OMX_NOTIFY_FALLBACK: '0',
           OMX_HOOK_DERIVED_SIGNALS: '0',
+          OMX_HUD: '1',
           TMUX: '',
           TMUX_PANE: '',
         },
@@ -1302,6 +1316,7 @@ exit 0
         ['--madmax', '--tmux'],
         {
           ...env,
+          OMX_HUD: '1',
           TMUX: '',
           TMUX_PANE: '',
           WSL_DISTRO_NAME: 'Ubuntu',

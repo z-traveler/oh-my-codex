@@ -5905,10 +5905,12 @@ export async function onHookEvent(event) {
     const originalTmuxPane = process.env.TMUX_PANE;
     const originalPath = process.env.PATH;
     const originalHudOwner = process.env[OMX_TMUX_HUD_OWNER_ENV];
+    const originalHud = process.env.OMX_HUD;
     const originalArgv = process.argv;
     try {
       process.env.TMUX = "1";
       process.env.TMUX_PANE = "%1";
+      process.env.OMX_HUD = "1";
       process.env[OMX_TMUX_HUD_OWNER_ENV] = "1";
       await mkdir(join(cwd, ".omx", "state"), { recursive: true });
       await writeFile(
@@ -6031,9 +6033,11 @@ esac
     const originalTmuxPane = process.env.TMUX_PANE;
     const originalPath = process.env.PATH;
     const originalHudOwner = process.env[OMX_TMUX_HUD_OWNER_ENV];
+    const originalHud = process.env.OMX_HUD;
     try {
       process.env.TMUX = "1";
       process.env.TMUX_PANE = "%1";
+      process.env.OMX_HUD = "1";
       process.env[OMX_TMUX_HUD_OWNER_ENV] = "1";
       const canonicalSessionId = "omx-canonical-hud-reuse";
       const nativeSessionId = "codex-native-hud-reuse";

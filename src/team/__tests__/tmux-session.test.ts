@@ -3350,6 +3350,7 @@ describe('createTeamSession tmux instance tagging', () => {
     const prevTmux = process.env.TMUX;
     const prevTmuxPane = process.env.TMUX_PANE;
     const prevWorkerCli = process.env.OMX_TEAM_WORKER_CLI;
+    const prevHud = process.env.OMX_HUD;
     try {
       await withMockTmuxFixture(
         'omx-tmux-redraw-leader-',
@@ -3411,6 +3412,7 @@ esac
           process.env.TMUX = 'leader-session,stub,0';
           process.env.TMUX_PANE = '%1';
           process.env.OMX_TEAM_WORKER_CLI = 'gemini';
+          process.env.OMX_HUD = '1';
 
           createTeamSession('Diff Gutter Redraw', 1, cwd);
 
@@ -3432,6 +3434,8 @@ esac
       else delete process.env.TMUX_PANE;
       if (typeof prevWorkerCli === 'string') process.env.OMX_TEAM_WORKER_CLI = prevWorkerCli;
       else delete process.env.OMX_TEAM_WORKER_CLI;
+      if (typeof prevHud === 'string') process.env.OMX_HUD = prevHud;
+      else delete process.env.OMX_HUD;
       await rm(cwd, { recursive: true, force: true });
     }
   });

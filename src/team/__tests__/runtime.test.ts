@@ -1572,6 +1572,7 @@ process.on('SIGTERM', () => process.exit(0));`,
     const prevGenericSessionId = process.env.SESSION_ID;
     const prevLaunchMode = process.env.OMX_TEAM_WORKER_LAUNCH_MODE;
     const prevWorkerCli = process.env.OMX_TEAM_WORKER_CLI;
+    const prevHud = process.env.OMX_HUD;
     const prevSkipReadyWait = process.env.OMX_TEAM_SKIP_READY_WAIT;
     let runtime: TeamRuntime | null = null;
 
@@ -1646,6 +1647,7 @@ esac
           process.env.TMUX_PANE = '%1';
           process.env.OMX_TEAM_WORKER_LAUNCH_MODE = 'interactive';
           process.env.OMX_TEAM_WORKER_CLI = 'gemini';
+          process.env.OMX_HUD = '1';
           process.env.OMX_TEAM_SKIP_READY_WAIT = '1';
 
           runtime = await withoutTeamWorkerEnv(() =>
@@ -1692,6 +1694,8 @@ esac
       else delete process.env.OMX_TEAM_WORKER_LAUNCH_MODE;
       if (typeof prevWorkerCli === 'string') process.env.OMX_TEAM_WORKER_CLI = prevWorkerCli;
       else delete process.env.OMX_TEAM_WORKER_CLI;
+      if (typeof prevHud === 'string') process.env.OMX_HUD = prevHud;
+      else delete process.env.OMX_HUD;
       if (typeof prevSkipReadyWait === 'string') process.env.OMX_TEAM_SKIP_READY_WAIT = prevSkipReadyWait;
       else delete process.env.OMX_TEAM_SKIP_READY_WAIT;
       await rm(cwd, { recursive: true, force: true });
@@ -4041,6 +4045,7 @@ process.on('SIGTERM', () => process.exit(0));
     const previousTmuxPane = process.env.TMUX_PANE;
     const previousLaunchMode = process.env.OMX_TEAM_WORKER_LAUNCH_MODE;
     const previousWorkerCli = process.env.OMX_TEAM_WORKER_CLI;
+    const previousHud = process.env.OMX_HUD;
     let runtime: TeamRuntime | null = null;
     try {
       await withMockTmuxFixture(
@@ -4146,6 +4151,7 @@ exit 0
           process.env.TMUX_PANE = '%1';
           process.env.OMX_TEAM_WORKER_LAUNCH_MODE = 'interactive';
           process.env.OMX_TEAM_WORKER_CLI = 'gemini';
+          process.env.OMX_HUD = '1';
 
           runtime = await withoutTeamWorkerEnv(() =>
             startTeam(
@@ -4202,6 +4208,8 @@ exit 0
       else delete process.env.OMX_TEAM_WORKER_LAUNCH_MODE;
       if (typeof previousWorkerCli === 'string') process.env.OMX_TEAM_WORKER_CLI = previousWorkerCli;
       else delete process.env.OMX_TEAM_WORKER_CLI;
+      if (typeof previousHud === 'string') process.env.OMX_HUD = previousHud;
+      else delete process.env.OMX_HUD;
       await rm(cwd, { recursive: true, force: true });
     }
   });
