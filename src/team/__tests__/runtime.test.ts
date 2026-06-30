@@ -542,14 +542,18 @@ async function withNativeWindowsPlatform<T>(run: () => Promise<T>): Promise<T> {
 }
 
 const ORIGINAL_OMX_TEAM_STATE_ROOT = process.env.OMX_TEAM_STATE_ROOT;
+const ORIGINAL_OMX_HUD = process.env.OMX_HUD;
 
 beforeEach(() => {
   delete process.env.OMX_TEAM_STATE_ROOT;
+  process.env.OMX_HUD = '1';
 });
 
 afterEach(() => {
   if (typeof ORIGINAL_OMX_TEAM_STATE_ROOT === 'string') process.env.OMX_TEAM_STATE_ROOT = ORIGINAL_OMX_TEAM_STATE_ROOT;
   else delete process.env.OMX_TEAM_STATE_ROOT;
+  if (typeof ORIGINAL_OMX_HUD === 'string') process.env.OMX_HUD = ORIGINAL_OMX_HUD;
+  else delete process.env.OMX_HUD;
 });
 
 describe('runtime', () => {
