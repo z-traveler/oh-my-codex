@@ -19,7 +19,7 @@
 
 ## Official project and package
 
-The official/original OMX project is this repository, [`Yeachan-Heo/oh-my-codex`](https://github.com/Yeachan-Heo/oh-my-codex), and the official npm package for this project is [`oh-my-codex`](https://www.npmjs.com/package/oh-my-codex). Install this project with `npm install -g oh-my-codex` (or alongside Codex CLI as shown below).
+The official/original OMX project is this repository, [`Yeachan-Heo/oh-my-codex`](https://github.com/Yeachan-Heo/oh-my-codex), and the official npm package for this project is [`oh-my-codex`](https://www.npmjs.com/package/oh-my-codex). If you want the published release, install it with `npm install -g oh-my-codex` (or alongside Codex CLI as shown below). If you are running a local checkout, fork, or custom branch, install that checkout by path instead, for example `npm install -g /path/to/oh-my-codex`; using `npm install -g oh-my-codex` will replace it with the registry package.
 
 Third-party projects or forks that use names such as “OMX v2” are not official continuations, replacements, or release lines for this repository unless this README or the docs explicitly say so. When in doubt, trust this repository and the `oh-my-codex` package as the official install target.
 
@@ -65,7 +65,16 @@ It keeps Codex as the execution engine and makes it easier to:
 
 If you want the default OMX experience, start here:
 
-Choose one install path. If Codex CLI is already installed (Homebrew, npm, or another supported method):
+Choose one install path. If you are using a local checkout, fork, or custom branch, install that checkout by path first:
+
+```bash
+cd /path/to/oh-my-codex
+npm run build
+npm install -g "$PWD"
+omx setup
+```
+
+If Codex CLI is already installed (Homebrew, npm, or another supported method) and you want the published registry release:
 
 ```bash
 codex --version
@@ -74,7 +83,7 @@ npm install -g oh-my-codex
 omx --worktree=feat/task --madmax --xhigh
 ```
 
-If you do not have Codex CLI yet and want npm to manage it:
+If you do not have Codex CLI yet and want npm to manage Codex plus the published OMX release:
 
 ```bash
 npm install -g @openai/codex
@@ -83,7 +92,7 @@ npm install -g oh-my-codex
 
 Do not run a combined `npm install -g @openai/codex oh-my-codex` over an existing Homebrew-owned `codex` binary such as `/opt/homebrew/bin/codex`; npm may fail with `EEXIST` when `@openai/codex` tries to create the same binary. OMX only needs a working, authenticated `codex` command on `PATH`; it does not require Codex to be installed through npm.
 
-On a real `oh-my-codex` version bump, the global npm install now prints an explicit reminder instead of launching setup automatically. When you're ready, run the scoped setup command below or use `omx update` to check npm and then run the same setup refresh path.
+On a real `oh-my-codex` version bump, the global npm install now prints an explicit reminder instead of launching setup automatically. When you're ready, run the scoped setup command below. Use `omx update` only when you intentionally want to check npm and install the latest registry build before refreshing setup; do not use it when you need to stay on a local checkout, fork, or custom branch.
 
 OMX also checks for npm updates at launch on a throttled cadence and prompts before scheduling the update after the current session exits. Set `OMX_AUTO_UPDATE=0` to disable the launch-time check, or set `OMX_AUTO_UPDATE=defer` to schedule the same deferred update without prompting.
 
@@ -92,7 +101,7 @@ Choose the setup scope deliberately:
 - Use `omx setup --scope user` for user-level Codex setup when you are not preparing the current directory as an OMX project.
 - Avoid running project-scoped setup from a broad home directory or operating hub unless that directory is intentionally the project under review. A home-level `AGENTS.md` often contains global safety and routing rules; keep project-specific OMX runtime guidance in the real repository instead.
 
-**Codex plugin install note:** this repo also ships an official Codex plugin layout at `plugins/oh-my-codex` with marketplace metadata in `.agents/plugins/marketplace.json`. That plugin bundles the mirrored skill surface plus plugin-scoped companion metadata for official Codex lifecycle hooks, optional MCP compatibility servers, and apps. It is still **not** a replacement for the global `oh-my-codex` CLI plus scoped setup: plugin-scoped hooks launch the installed `omx` CLI, legacy setup mode installs native agents and prompts, and plugin setup mode relies on plugin discovery for bundled skills while archiving/removing legacy OMX-managed prompts/native-agent TOMLs so stale role files cannot shadow plugin behavior. Plugin mode still needs a persistent scope `AGENTS.md` (`~/.codex/AGENTS.md` for user setup or `./AGENTS.md` for project setup) as the durable orchestration guidance layer; session-scoped AGENTS files only compose that durable guidance with runtime overlays and are not a replacement.
+**Codex plugin install note:** this repo also ships an official Codex plugin layout at `plugins/oh-my-codex` with marketplace metadata in `.agents/plugins/marketplace.json`. That plugin bundles the mirrored skill surface plus plugin-scoped companion metadata for official Codex lifecycle hooks, optional MCP compatibility servers, and apps. It is still **not** a replacement for installing the intended `omx` CLI source plus scoped setup (`npm install -g oh-my-codex` for the published registry release, or `npm install -g "$PWD"` from a local checkout/fork/custom branch): plugin-scoped hooks launch the installed `omx` CLI, legacy setup mode installs native agents and prompts, and plugin setup mode relies on plugin discovery for bundled skills while archiving/removing legacy OMX-managed prompts/native-agent TOMLs so stale role files cannot shadow plugin behavior. Plugin mode still needs a persistent scope `AGENTS.md` (`~/.codex/AGENTS.md` for user setup or `./AGENTS.md` for project setup) as the durable orchestration guidance layer; session-scoped AGENTS files only compose that durable guidance with runtime overlays and are not a replacement.
 
 Then work normally inside Codex:
 
@@ -269,14 +278,15 @@ Most users should think of OMX as **better task routing + better workflow + bett
 
 ## Start here if you are new
 
-1. If Codex CLI already exists, verify it with `codex --version` and install or update OMX with `npm install -g oh-my-codex`; otherwise install `@openai/codex` separately first if you want npm to manage Codex
-2. After install or real OMX version bumps, run `omx setup --scope project --merge-agents` from the target git project or `omx setup --scope user` for user-level Codex setup, or use `omx update` when you also want npm to check for and install the latest build before refreshing setup
-3. Run `omx doctor`
-4. Run a real execution smoke test: `codex login status` and `omx exec --skip-git-repo-check -C . "Reply with exactly OMX-EXEC-OK"`
-5. Launch with a named worktree from a git repo, for example `omx --worktree=feat/task --madmax --xhigh`; if you run concurrent `--madmax` sessions, use distinct named worktrees such as `--worktree=feature/auth`
-6. Use `$deep-interview "..."` when the request or boundaries are still unclear
-7. Use `$ralplan "..."` to approve the plan and review tradeoffs
-8. Use `$ultragoal`, `$ultrawork`, `$autopilot`, or `$ralph` when the task needs an execution spine; add `/goal` when durable objective/checkpoint structure should be explicit
+1. If Codex CLI already exists, verify it with `codex --version`; otherwise install `@openai/codex` separately first if you want npm to manage Codex
+2. Install or update OMX from the source you intend to run: use `npm install -g "$PWD"` from a local checkout/fork/custom branch, or `npm install -g oh-my-codex` only when you want the published registry release
+3. After install or real OMX version bumps, run `omx setup --scope project --merge-agents` from the target git project or `omx setup --scope user` for user-level Codex setup; use `omx update` only when you want npm to check for and install the latest registry build before refreshing setup
+4. Run `omx doctor`
+5. Run a real execution smoke test: `codex login status` and `omx exec --skip-git-repo-check -C . "Reply with exactly OMX-EXEC-OK"`
+6. Launch with a named worktree from a git repo, for example `omx --worktree=feat/task --madmax --xhigh`; if you run concurrent `--madmax` sessions, use distinct named worktrees such as `--worktree=feature/auth`
+7. Use `$deep-interview "..."` when the request or boundaries are still unclear
+8. Use `$ralplan "..."` to approve the plan and review tradeoffs
+9. Use `$ultragoal`, `$ultrawork`, `$autopilot`, or `$ralph` when the task needs an execution spine; add `/goal` when durable objective/checkpoint structure should be explicit
 
 ## Recommended workflow
 
@@ -328,7 +338,7 @@ These are operator/support surfaces:
   - plugin setup keeps `AGENTS.md` as persistent durable guidance even though bundled skills/hooks come from the plugin cache; `omx doctor` treats a missing persistent scope `AGENTS.md` in plugin mode as a failed check because the session-scoped AGENTS file would otherwise contain only runtime overlay guidance
   - `omx setup --scope project --merge-agents` preserves existing project `AGENTS.md` guidance while inserting or refreshing generated OMX sections between `<!-- OMX:AGENTS:START -->` / `<!-- OMX:AGENTS:END -->`; without `--merge-agents` or `--force`, non-interactive setup keeps skipping existing `AGENTS.md` files
   - `omx uninstall` removes OMX-managed wrappers from `.codex/hooks.json` but keeps the file when user hooks remain
-- `omx update` checks npm immediately, installs the newest global OMX build, then reruns the same interactive setup refresh path
+- `omx update` checks npm immediately, installs the newest registry OMX build globally, then reruns the same interactive setup refresh path; do not use it when you need to stay on a local checkout/fork/custom branch
 - launch-time update checks are throttled and prompt by default; use `OMX_AUTO_UPDATE=0` to disable them or `OMX_AUTO_UPDATE=defer` to schedule deferred updates without a prompt
 - fresh OMX-managed `gpt-5.5` config seeding now recommends `model_context_window = 250000` and `model_auto_compact_token_limit = 200000`, but only when those keys are missing
 - `.omx-config.json` model/env routing is documented in [the model/env routing reference](./docs/reference/omx-config-schema-routing.md); only edit keys supported by your installed OMX version
