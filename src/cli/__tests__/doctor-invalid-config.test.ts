@@ -37,7 +37,14 @@ describe('omx doctor invalid config detection', () => {
       await writeFile(
         join(codexDir, 'config.toml'),
         `
-model = "gpt-5.5"
+model = "gpt-5.6-sol"
+
+[features]
+multi_agent = false
+
+[agents]
+max_threads = 17
+max_depth = 5
 
 [tui]
 status_line = ["model-with-reasoning"]
@@ -59,6 +66,8 @@ theme = "base16-ocean-light"
         res.stdout,
         /\[XX\] Config: invalid config\.toml \(possible duplicate TOML table such as \[tui\]\)/,
       );
+      assert.doesNotMatch(res.stdout, /GPT-5\.6 multi-agent compatibility/);
+      assert.doesNotMatch(res.stdout, /All checks passed!/);
     } finally {
       await rm(wd, { recursive: true, force: true });
     }

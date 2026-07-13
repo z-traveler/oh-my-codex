@@ -12,8 +12,8 @@ import {
   buildWorkerProcessLaunchSpec,
   scrubTeamWorkerHudOwnershipEnv,
   resolveTeamWorkerCli,
+  resolveTeamWorkerCliForResolvedLaunchArgs,
   type TeamWorkerCli,
-  resolveTeamWorkerCliPlan,
   resolveTeamWorkerLaunchMode,
   type TeamSession,
   waitForWorkerReady,
@@ -123,9 +123,11 @@ import {
   resolveTeamWorkerLaunchArgs,
   resolveTeamWorkerLaunchDiagnostics,
   TEAM_LOW_COMPLEXITY_DEFAULT_MODEL,
+  TEAM_WORKER_INHERITED_MODEL_ENV,
   parseTeamWorkerLaunchArgs,
   resolveAgentDefaultModel,
   resolveAgentReasoningEffort,
+  shouldHonorAgentExactModel,
   type TeamReasoningEffort,
 } from './model-contract.js';
 import { resolveCanonicalTeamStateRoot } from './state-root.js';
@@ -136,6 +138,9 @@ import { hasStructuredVerificationEvidence } from '../verification/verifier.js';
 import { buildRebalanceDecisions } from './rebalance-policy.js';
 import { getStatePath } from '../mcp/state-paths.js';
 import { readModeState, updateModeState } from '../modes/base.js';
+import { resolveWorktreeToolContext, worktreeToolContextEnv } from '../utils/worktree-tool-context.js';
+
+export { resolveTeamWorkerCliForResolvedLaunchArgs };
 import {
   buildApprovedTeamHandoffSection,
   buildApprovedTeamExecutionBinding,
@@ -2328,8 +2333,14 @@ export function resolveWorkerLaunchArgsFromEnv(
   preferredReasoning?: TeamReasoningEffort,
   workerCliOverride?: TeamWorkerCli,
 ): string[] {
-  const inheritedArgs = (typeof inheritedLeaderModel === 'string' && inheritedLeaderModel.trim() !== '')
-    ? ['--model', inheritedLeaderModel.trim()]
+  const inheritedFromEnv = typeof env[TEAM_WORKER_INHERITED_MODEL_ENV] === 'string'
+    ? env[TEAM_WORKER_INHERITED_MODEL_ENV]?.trim()
+    : undefined;
+  const effectiveInheritedModel = typeof inheritedLeaderModel === 'string' && inheritedLeaderModel.trim() !== ''
+    ? inheritedLeaderModel.trim()
+    : inheritedFromEnv;
+  const inheritedArgs = effectiveInheritedModel
+    ? ['--model', effectiveInheritedModel]
     : [];
   const fallbackModel = resolveAgentDefaultModel(agentType, env.CODEX_HOME);
   const diagnostics = resolveTeamWorkerLaunchDiagnostics({
@@ -2337,6 +2348,7 @@ export function resolveWorkerLaunchArgsFromEnv(
     inheritedArgs,
     fallbackModel,
     preferredReasoning,
+    honorExactRoleModel: shouldHonorAgentExactModel(agentType, env.CODEX_HOME),
     requestedAgentType: agentType,
   });
 
@@ -2586,10 +2598,6 @@ export async function startTeam(
     existingRaw: launchEnv.OMX_TEAM_WORKER_LAUNCH_ARGS,
     fallbackModel: resolveAgentDefaultModel(agentType, codexHomeOverride),
   });
-  const workerCliPlan = resolveTeamWorkerCliPlan(workerCount, sharedWorkerLaunchArgs, launchEnv);
-  if (workerLaunchMode === 'prompt') {
-    assertPromptModeWorkerCliSupported(workerCliPlan);
-  }
   const workerReadyTimeoutMs = resolveWorkerReadyTimeoutMs(launchEnv);
   const workerStartupEvidenceTimeoutMs = resolveWorkerStartupEvidenceTimeoutMs(
     launchEnv,
@@ -2729,7 +2737,9 @@ export async function startTeam(
       initialPrompt?: string;
       workerLaunchArgs: string[];
       workerCli: TeamWorkerCli;
+      toolContext: ReturnType<typeof resolveWorktreeToolContext>;
     }>;
+    const workerCliPlan: TeamWorkerCli[] = [];
 
     for (let i = 1; i <= workerCount; i++) {
       const workerName = `worker-${i}`;
@@ -2750,13 +2760,20 @@ export async function startTeam(
         runtimeRole,
         undefined,
         preferredReasoning,
-        workerCliPlan[i - 1],
       );
+      const workerCli = resolveTeamWorkerCliForResolvedLaunchArgs(i, workerCount, workerLaunchArgs, launchEnv);
       const resolvedWorkerModel = parseTeamWorkerLaunchArgs(workerLaunchArgs).modelOverride ?? undefined;
       const rolePromptContent = rawRolePromptContent
         ? composeRoleInstructionsForRole(runtimeRole, rawRolePromptContent, resolvedWorkerModel)
         : null;
       const workerWorktreePath = workerWorkspace.worktreePath ?? undefined;
+      const toolContext = resolveWorktreeToolContext({
+        cwd: workerWorkspace.cwd,
+        scope: 'team',
+        repoRoot: workerWorkspace.worktreeRepoRoot ?? leaderCwd,
+        worktreeRoot: workerWorkspace.worktreePath ?? workerWorkspace.cwd,
+        env: launchEnv,
+      });
       const fallbackInstructionsPath = workerInstructionsPath ?? join(leaderCwd, 'AGENTS.md');
       const instructionsFilePath = workerWorktreePath
         ? await writeWorkerWorktreeRootAgentsFile({
@@ -2767,6 +2784,7 @@ export async function startTeam(
           teamStateRoot,
           leaderCwd,
           worktreePath: workerWorktreePath,
+          toolContext,
         })
         : rolePromptContent
           ? await writeWorkerRoleInstructionsFile(sanitized, workerName, leaderCwd, fallbackInstructionsPath, runtimeRole, rolePromptContent)
@@ -2790,10 +2808,11 @@ export async function startTeam(
         resolveInstructionStateRoot(workerWorkspace.worktreePath),
       );
       const trigger = triggerDirective.text;
-      const initialPrompt = workerCliPlan[i - 1] === 'gemini' ? trigger : undefined;
+      const initialPrompt = workerCli === 'gemini' ? trigger : undefined;
       if (initialPrompt) {
         await writeWorkerInbox(sanitized, workerName, inbox, leaderCwd);
       }
+      workerCliPlan.push(workerCli);
       workerBootstrapPlans.push({
         workerName,
         workerWorkspace,
@@ -2806,8 +2825,12 @@ export async function startTeam(
         triggerIntent: triggerDirective.intent,
         initialPrompt,
         workerLaunchArgs,
-        workerCli: workerCliPlan[i - 1],
+        workerCli,
+        toolContext,
       });
+    }
+    if (workerLaunchMode === 'prompt') {
+      assertPromptModeWorkerCliSupported(workerCliPlan);
     }
 
     const workerStartups = workerBootstrapPlans.map((plan) => {
@@ -2817,6 +2840,7 @@ export async function startTeam(
         [MODEL_INSTRUCTIONS_FILE_ENV]: plan.instructionsFilePath,
         OMX_TEAM_DISPLAY_NAME: displayName,
         ...(codexHomeOverride ? { CODEX_HOME: codexHomeOverride } : {}),
+        ...worktreeToolContextEnv(plan.toolContext),
       };
       if (plan.workerWorkspace.worktreePath) {
         env.OMX_TEAM_WORKTREE_PATH = plan.workerWorkspace.worktreePath;

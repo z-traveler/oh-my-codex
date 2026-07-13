@@ -62,6 +62,11 @@ import { HUD_RESIZE_RECONCILE_DELAY_SECONDS, HUD_TMUX_TEAM_HEIGHT_LINES } from '
 import * as tmuxSessionModule from '../tmux-session.js';
 import { OMX_ENTRY_PATH_ENV, OMX_STARTUP_CWD_ENV } from '../../utils/paths.js';
 
+const fsMutable = fs as typeof fs & {
+  existsSync: typeof fs.existsSync;
+  statSync: typeof fs.statSync;
+};
+
 function withEmptyPath<T>(fn: () => T): T {
   const prev = process.env.PATH;
   process.env.PATH = '';
@@ -74,25 +79,25 @@ function withEmptyPath<T>(fn: () => T): T {
 }
 
 function withMockedExistsSync<T>(mock: typeof fs.existsSync, fn: () => T): T {
-  const original = fs.existsSync;
-  fs.existsSync = mock;
+  const original = fsMutable.existsSync;
+  fsMutable.existsSync = mock;
   syncBuiltinESMExports();
   try {
     return fn();
   } finally {
-    fs.existsSync = original;
+    fsMutable.existsSync = original;
     syncBuiltinESMExports();
   }
 }
 
 function withMockedStatSync<T>(mock: typeof fs.statSync, fn: () => T): T {
-  const original = fs.statSync;
-  fs.statSync = mock;
+  const original = fsMutable.statSync;
+  fsMutable.statSync = mock;
   syncBuiltinESMExports();
   try {
     return fn();
   } finally {
-    fs.statSync = original;
+    fsMutable.statSync = original;
     syncBuiltinESMExports();
   }
 }
@@ -111,7 +116,7 @@ Press Enter to confirm`;
 const READY_HELPER_CAPTURE = `╭────────────────────────────────────────────╮
 │ >_ OpenAI Codex (v0.114.0)                 │
 │                                            │
-│ model:     gpt-5.5 high   /model to change │
+│ model:     gpt-5.6-sol high   /model to change │
 │ directory: ~/Workspace/demo                │
 ╰────────────────────────────────────────────╯
 
@@ -120,7 +125,7 @@ How can I help you today?`;
 const VIEWPORT_WITHOUT_VISIBLE_PROMPT_CAPTURE = `╭────────────────────────────────────────────╮
 │ >_ OpenAI Codex (v0.118.0)                 │
 │                                            │
-│ model:     gpt-5.5 high   /model to change │
+│ model:     gpt-5.6-sol high   /model to change │
 │ directory: ~/Workspace/demo                │
 ╰────────────────────────────────────────────╯
 
@@ -1277,26 +1282,138 @@ describe('buildWorkerStartupCommand', () => {
     }
   });
 
-  it('does not use startup scripts on win32/MSYS so existing tmux path translation remains in force', () => {
+  it('uses a generated startup script with MSYS paths on win32/MSYS', async () => {
     const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
     const prevMsystem = process.env.MSYSTEM;
+    const prevBypass = process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT;
+    const stateRoot = 'C:\\omx-state';
     try {
       Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
       process.env.MSYSTEM = 'MINGW64';
-      assert.equal(
-        writeWorkerStartupScriptCommand(
-          'alpha',
-          1,
-          ['--model', 'gpt-5'],
-          'C:\\repo',
-          { OMX_TEAM_STATE_ROOT: 'C:\\repo\\.omx\\state' },
-        ),
-        null,
+      process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT = '0';
+      const cmd = writeWorkerStartupScriptCommand(
+        'alpha',
+        1,
+        ['--model', 'gpt-5'],
+        'C:\\repo',
+        { OMX_TEAM_STATE_ROOT: stateRoot },
+        'gemini',
       );
+      assert.equal(cmd, `exec /bin/sh '/c/omx-state/team/alpha/runtime/worker-1-startup.sh'`);
+      const script = await readFile(join(stateRoot, 'team', 'alpha', 'runtime', 'worker-1-startup.sh'), 'utf-8');
+      assert.match(script, /^cd '\/c\/repo'$/m);
+      assert.match(script, /^exec '\/bin\/sh' -c /m);
     } finally {
+      await rm(stateRoot, { recursive: true, force: true });
       if (originalPlatform) Object.defineProperty(process, 'platform', originalPlatform);
       if (typeof prevMsystem === 'string') process.env.MSYSTEM = prevMsystem;
       else delete process.env.MSYSTEM;
+      if (typeof prevBypass === 'string') process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT = prevBypass;
+      else delete process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT;
+    }
+  });
+
+  it('does not emit cmd.exe flag wrappers for MSYS startup scripts with cmd shims', async () => {
+    const fakeRoot = await mkdtemp(join(tmpdir(), 'omx-worker-startup-msys-cmd-shim-'));
+    const fakeBin = join(fakeRoot, 'bin dir');
+    const stateRoot = join(fakeRoot, 'state root');
+    const startupScriptPath = join(stateRoot, 'team', 'alpha', 'runtime', 'worker-1-startup.sh');
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    const prevPath = process.env.PATH;
+    const prevPathext = process.env.PATHEXT;
+    const prevMsystem = process.env.MSYSTEM;
+    const prevBypass = process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT;
+    try {
+      await mkdir(fakeBin, { recursive: true });
+      const geminiCmdPath = join(fakeBin, 'gemini.cmd');
+      await writeFile(geminiCmdPath, '@echo off\r\n');
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+      process.env.PATH = fakeBin;
+      process.env.PATHEXT = '.CMD';
+      process.env.MSYSTEM = 'MINGW64';
+      process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT = '0';
+
+      const cmd = writeWorkerStartupScriptCommand(
+        'alpha',
+        1,
+        ['--model', 'gemini-2.5-pro'],
+        'C:\\repo with space',
+        { OMX_TEAM_STATE_ROOT: stateRoot },
+        'gemini',
+      );
+
+      assert.equal(cmd, `exec /bin/sh '${startupScriptPath}'`);
+      const script = await readFile(startupScriptPath, 'utf-8');
+      assert.doesNotMatch(script, /cmd\.exe/i);
+      assert.doesNotMatch(script, /'\/d'|'\/s'|'\/c'|\s\/d\s|\s\/s\s|\s\/c\s/i);
+      assert.match(script, /^cd '\/c\/repo with space'$/m);
+      assert.match(script, /^exec '\/bin\/sh' -c /m);
+      assert.match(script, new RegExp(escapeRegExp(geminiCmdPath)));
+      assert.match(script, /--approval-mode/);
+      assert.match(script, /yolo/);
+    } finally {
+      await rm(fakeRoot, { recursive: true, force: true });
+      if (originalPlatform) Object.defineProperty(process, 'platform', originalPlatform);
+      if (typeof prevPath === 'string') process.env.PATH = prevPath;
+      else delete process.env.PATH;
+      if (typeof prevPathext === 'string') process.env.PATHEXT = prevPathext;
+      else delete process.env.PATHEXT;
+      if (typeof prevMsystem === 'string') process.env.MSYSTEM = prevMsystem;
+      else delete process.env.MSYSTEM;
+      if (typeof prevBypass === 'string') process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT = prevBypass;
+      else delete process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT;
+    }
+  });
+
+  it('wraps MSYS prompt worker cmd shims for shell-free Windows spawn', async () => {
+    const fakeRoot = await mkdtemp(join(tmpdir(), 'omx-worker-process-msys-bat-shim-'));
+    const fakeBin = join(fakeRoot, 'bin dir');
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    const prevPath = process.env.PATH;
+    const prevPathext = process.env.PATHEXT;
+    const prevMsystem = process.env.MSYSTEM;
+    const prevBypass = process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT;
+    const prevComSpec = process.env.ComSpec;
+    try {
+      await mkdir(fakeBin, { recursive: true });
+      const geminiBatPath = join(fakeBin, 'gemini.bat');
+      await writeFile(geminiBatPath, '@echo off\r\n');
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+      process.env.PATH = fakeBin;
+      process.env.PATHEXT = '.BAT';
+      process.env.MSYSTEM = 'MINGW64';
+      process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT = '0';
+      process.env.ComSpec = 'C:\\Windows\\System32\\cmd.exe';
+
+      const spec = buildWorkerProcessLaunchSpec(
+        'alpha',
+        1,
+        ['--model', 'gemini-2.5-pro'],
+        'C:\\repo with space',
+        {},
+        'gemini',
+      );
+
+      assert.equal(spec.command, 'C:\\Windows\\System32\\cmd.exe');
+      assert.deepEqual(spec.args.slice(0, 3), ['/d', '/s', '/c']);
+      assert.match(spec.args[3] ?? '', new RegExp(escapeRegExp(geminiBatPath)));
+      assert.match(spec.args[3] ?? '', /--approval-mode/);
+      assert.match(spec.args[3] ?? '', /yolo/);
+      assert.equal(spec.env.OMX_LEADER_CLI_PATH, geminiBatPath);
+      assert.notEqual(spec.command, geminiBatPath);
+    } finally {
+      await rm(fakeRoot, { recursive: true, force: true });
+      if (originalPlatform) Object.defineProperty(process, 'platform', originalPlatform);
+      if (typeof prevPath === 'string') process.env.PATH = prevPath;
+      else delete process.env.PATH;
+      if (typeof prevPathext === 'string') process.env.PATHEXT = prevPathext;
+      else delete process.env.PATHEXT;
+      if (typeof prevMsystem === 'string') process.env.MSYSTEM = prevMsystem;
+      else delete process.env.MSYSTEM;
+      if (typeof prevBypass === 'string') process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT = prevBypass;
+      else delete process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT;
+      if (typeof prevComSpec === 'string') process.env.ComSpec = prevComSpec;
+      else delete process.env.ComSpec;
     }
   });
 
@@ -1558,7 +1675,7 @@ describe('buildWorkerStartupCommand', () => {
     try {
       const profiles = [
         ['--model', 'gpt-5', '-c', 'model_reasoning_effort="high"'],
-        ['--model', 'gpt-5.3-codex-spark', '-c', 'model_reasoning_effort="low"'],
+        ['--model', 'gpt-5.6-luna', '-c', 'model_reasoning_effort="low"'],
       ];
 
       for (const launchArgs of profiles) {
@@ -2201,7 +2318,7 @@ describe('team worker CLI helpers', () => {
 
   it('translateWorkerLaunchArgsForCli omits non-gemini default models for gemini workers', () => {
     assert.deepEqual(
-      translateWorkerLaunchArgsForCli('gemini', ['--model', 'gpt-5.3-codex-spark'], 'Read worker inbox'),
+      translateWorkerLaunchArgsForCli('gemini', ['--model', 'gpt-5.6-luna'], 'Read worker inbox'),
       ['--approval-mode', 'yolo', '-i', 'Read worker inbox'],
     );
   });
@@ -2331,7 +2448,7 @@ describe('team worker launch mode helpers', () => {
       const spec = buildWorkerProcessLaunchSpec(
         'alpha-team',
         2,
-        ['--model', 'gpt-5.3-codex'],
+        ['--model', 'gpt-5.6-terra'],
         '/tmp/workspace',
         { OMX_TEAM_STATE_ROOT: '/tmp/workspace/.omx/state' },
         'codex',
@@ -2339,7 +2456,7 @@ describe('team worker launch mode helpers', () => {
       // command is now the resolved absolute path (or bare binary if which fails)
       assert.equal(spec.workerCli, 'codex');
       assert.ok(typeof spec.command === 'string' && spec.command.length > 0, 'command must be a non-empty string');
-      assert.deepEqual(spec.args, ['--model', 'gpt-5.3-codex', '--dangerously-bypass-approvals-and-sandbox']);
+      assert.deepEqual(spec.args, ['--model', 'gpt-5.6-terra', '--dangerously-bypass-approvals-and-sandbox']);
       assert.equal(spec.env.OMX_TEAM_WORKER, 'alpha-team/worker-2');
       assert.equal(spec.env.OMX_TEAM_STATE_ROOT, '/tmp/workspace/.omx/state');
       assert.equal(spec.env.OMX_TMUX_HUD_OWNER, undefined);
@@ -2383,14 +2500,14 @@ describe('team worker launch mode helpers', () => {
       const spec = buildWorkerProcessLaunchSpec(
         'alpha-team',
         2,
-        ['--model', 'gpt-5.3-codex-spark'],
+        ['--model', 'gpt-5.6-luna'],
         '/tmp/workspace',
         { OMX_TEAM_STATE_ROOT: '/tmp/workspace/.omx/state' },
         'codex',
         undefined,
         'explore',
       );
-      assert.deepEqual(spec.args, ['--model', 'gpt-5.3-codex-spark']);
+      assert.deepEqual(spec.args, ['--model', 'gpt-5.6-luna']);
     } finally {
       if (typeof prevBypass === 'string') process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT = prevBypass;
       else delete process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT;
@@ -2556,7 +2673,7 @@ describe('team worker launch mode helpers', () => {
 
     try {
       await writeFile(join(codexHome, 'config.toml'), [
-        'model = "gpt-5.5"',
+        'model = "gpt-5.6-sol"',
         'model_provider = "custom_provider"',
         '',
         '[model_providers.custom_provider]',
@@ -2672,7 +2789,7 @@ describe('team worker launch mode helpers', () => {
       const spec = buildWorkerProcessLaunchSpec(
         'provider-override-team',
         1,
-        ['-c', 'model_provider="cheapRouter"', '--model', 'gpt-5.5'],
+        ['-c', 'model_provider="cheapRouter"', '--model', 'gpt-5.6-sol'],
         '/tmp/workspace',
         {},
         'codex',
@@ -2680,7 +2797,7 @@ describe('team worker launch mode helpers', () => {
 
       assert.equal(spec.env.CHEAP_PROVIDER_API_KEY, 'cheap-secret');
       assert.equal(spec.env.DEFAULT_PROVIDER_API_KEY, undefined);
-      assert.deepEqual(spec.args.slice(0, 4), ['-c', 'model_provider="cheapRouter"', '--model', 'gpt-5.5']);
+      assert.deepEqual(spec.args.slice(0, 4), ['-c', 'model_provider="cheapRouter"', '--model', 'gpt-5.6-sol']);
     } finally {
       if (typeof prevBypass === 'string') process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT = prevBypass;
       else delete process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT;
@@ -2978,7 +3095,7 @@ case "$1" in
 ╭────────────────────────────────────────────╮
 │ >_ OpenAI Codex (v0.114.0)                 │
 │                                            │
-│ model:     gpt-5.5 high   /model to change │
+│ model:     gpt-5.6-sol high   /model to change │
 │ directory: ~/Workspace/demo                │
 ╰────────────────────────────────────────────╯
 

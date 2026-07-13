@@ -383,7 +383,7 @@ const REQUIRED_TEAM_CLI_API_MARKERS = [
 
 const DEFAULT_SETUP_SCOPE: SetupScope = "user";
 const DEFAULT_SETUP_INSTALL_MODE: SetupInstallMode = "legacy";
-const LEGACY_SETUP_MODEL = "gpt-5.3-codex";
+const LEGACY_SETUP_MODELS = new Set(["gpt-5.3-codex", "gpt-5.5"]);
 const DEFAULT_SETUP_MODEL = DEFAULT_FRONTIER_MODEL;
 const OBSOLETE_NATIVE_AGENT_FIELD = ["skill", "ref"].join("_");
 const GITHUB_AUTH_STATUS_TIMEOUT_MS = 2_000;
@@ -1327,6 +1327,8 @@ async function refreshOmxPluginDiscoveryCache(
 			!skillListChanged
 		) continue;
 
+
+
 		staleDirs.push(cacheDir);
 		if (!options.dryRun) {
 			await rm(cacheDir, { recursive: true, force: true });
@@ -1402,9 +1404,13 @@ async function resolveSetupInstallMode(
 		return { installMode: persisted.installMode, source: "persisted" };
 	}
 
-	if (scope !== "user") return null;
-
 	const discoveredPluginCacheDir = await discoverOmxPluginCacheDir();
+	if (scope !== "user") {
+		return discoveredPluginCacheDir
+			? { installMode: "plugin", source: "default" }
+			: null;
+	}
+
 	const defaultMode =
 		persistedReviewDecision === "review" && persisted?.installMode
 			? persisted.installMode
@@ -2009,7 +2015,7 @@ async function cleanupPluginModeLegacyConfig(
 		options.developerInstructionsDecision,
 	);
 	config = stripOmxSeededBehavioralDefaults(config);
-	config = stripOmxFeatureFlags(config);
+	config = stripOmxFeatureFlags(config, { preserveMultiAgent: true });
 	config = stripManagedCodexHookTrustState(config);
 	config = stripOmxEnvSettings(config);
 	if (preservedFirstPartyMcp) {
@@ -2553,9 +2559,11 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 			scopeDirs.codexHomeDir,
 		);
 		if (pluginCacheRefresh.status === "refreshed") {
-			console.log(
-				`  ${dryRun ? "Would invalidate" : "Invalidated"} ${pluginCacheRefresh.staleDirs.length} stale Codex plugin discovery cache entr${pluginCacheRefresh.staleDirs.length === 1 ? "y" : "ies"} so plugin skills refresh from the packaged manifest.`,
-			);
+			if (pluginCacheRefresh.staleDirs.length > 0) {
+				console.log(
+					`  ${dryRun ? "Would invalidate" : "Invalidated"} ${pluginCacheRefresh.staleDirs.length} stale Codex plugin discovery cache entr${pluginCacheRefresh.staleDirs.length === 1 ? "y" : "ies"} so plugin skills refresh from the packaged manifest.`,
+				);
+			}
 		} else if (pluginCacheRefresh.status === "unchanged") {
 			console.log("  Codex plugin discovery cache already matches packaged plugin metadata.");
 		}
@@ -3116,7 +3124,7 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 			"  4. The AGENTS.md orchestration brain is loaded automatically",
 		);
 		console.log(
-			"  5. Native agent defaults configured in config.toml [agents] and TOML files written to .codex/agents/",
+			"  5. Native agent role TOML files written to .codex/agents/; use explicit agent_type when spawning OMX roles",
 		);
 	}
 	console.log(
@@ -4166,7 +4174,7 @@ async function updateManagedConfig(
 	let modelOverride: string | undefined;
 	const omxManagesTui = true;
 
-	if (currentModel === LEGACY_SETUP_MODEL) {
+	if (currentModel && LEGACY_SETUP_MODELS.has(currentModel)) {
 		const shouldPrompt =
 			typeof options.modelUpgradePrompt === "function" ||
 			(process.stdin.isTTY && process.stdout.isTTY);

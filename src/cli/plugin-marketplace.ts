@@ -478,6 +478,70 @@ function localPluginMcpServerTableHeaderPattern(serverName: string): RegExp {
 		`^\\s*\\[plugins\\.${JSON.stringify(OMX_LOCAL_PLUGIN_CONFIG_KEY).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\.mcp_servers\\.${serverName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\]\\s*$`,
 	);
 }
+function localPluginScalarLinePattern(): RegExp {
+	return new RegExp(
+		`^\\s*${JSON.stringify(OMX_LOCAL_PLUGIN_CONFIG_KEY).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*=.*$`,
+	);
+}
+
+function localPluginScalarBooleanPattern(): RegExp {
+	return new RegExp(
+		`^\\s*${JSON.stringify(OMX_LOCAL_PLUGIN_CONFIG_KEY).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*=\\s*(true|false)\\s*(?:#.*)?$`,
+	);
+}
+
+function tomlBooleanLiteralIsTrue(value: string): boolean {
+	return /^\s*true\s*(?:#.*)?$/.test(value);
+}
+
+export function hasLocalOmxPluginEnablement(config: string): boolean {
+	const modernHeaderPattern = localPluginTableHeaderPattern();
+	const legacyScalarPattern = localPluginScalarBooleanPattern();
+	const lines = config.split(/\r?\n/);
+	let inLocalPluginTable = false;
+	let inPluginsTable = false;
+
+	for (const line of lines) {
+		if (isTomlTableHeader(line)) {
+			inLocalPluginTable = modernHeaderPattern.test(line);
+			inPluginsTable = /^\s*\[plugins\]\s*$/.test(line);
+			continue;
+		}
+
+		if (inLocalPluginTable) {
+			const enabled = /^\s*enabled\s*=\s*(.*)$/.exec(line);
+			if (enabled && tomlBooleanLiteralIsTrue(enabled[1])) return true;
+		}
+
+		if (inPluginsTable) {
+			const legacy = legacyScalarPattern.exec(line);
+			if (legacy?.[1] === "true") return true;
+		}
+	}
+
+	return false;
+}
+
+function removeLocalOmxPluginLegacyScalar(config: string): string {
+	const scalarPattern = localPluginScalarLinePattern();
+	const lines = config.split(/\r?\n/);
+	const result: string[] = [];
+	let inPluginsTable = false;
+
+	for (const line of lines) {
+		if (isTomlTableHeader(line)) {
+			inPluginsTable = /^\s*\[plugins\]\s*$/.test(line);
+			result.push(line);
+			continue;
+		}
+
+		if (inPluginsTable && scalarPattern.test(line)) continue;
+		result.push(line);
+	}
+
+	return result.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd();
+}
+
 
 export function hasLocalOmxPluginMcpServerRegistrations(config: string): boolean {
 	const lines = config.split(/\r?\n/);
@@ -544,8 +608,9 @@ function upsertTomlTableBooleanKey(
 }
 
 export function upsertLocalOmxPluginEnablement(config: string): string {
+	const normalized = removeLocalOmxPluginLegacyScalar(config);
 	const stripped = stripTomlTablesByHeaderPattern(
-		config,
+		normalized,
 		localPluginTableHeaderPattern(),
 	).trimEnd();
 	return `${stripped ? `${stripped}\n\n` : ""}[plugins.${JSON.stringify(OMX_LOCAL_PLUGIN_CONFIG_KEY)}]\nenabled = true\n`;
