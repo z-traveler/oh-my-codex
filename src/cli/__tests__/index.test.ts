@@ -50,6 +50,7 @@ import {
   resolveOmxRootForLaunch,
   resolveDisposableWorktreeOmxRootForLaunch,
   prepareCodexHomeForLaunch,
+  captureMadmaxWorktreeRuntimeContext,
   persistProjectLaunchRuntimeAuthState,
   persistProjectLaunchRuntimeProjectTrustState,
   cleanupRuntimeCodexHome,
@@ -126,22 +127,150 @@ afterEach(() => {
 });
 
 describe("madmax state isolation", () => {
-  it("auto-isolates only madmax launch and exec invocations", () => {
+  it("auto-isolates madmax launch and exec invocations without boxing worktree-only launches", () => {
     assert.equal(shouldAutoIsolateMadmaxLaunch("launch", ["--madmax"], {}), true);
     assert.equal(shouldAutoIsolateMadmaxLaunch("exec", ["--madmax-spark"], {}), true);
+    assert.equal(shouldAutoIsolateMadmaxLaunch("launch", ["--worktree"], {}), false);
+    assert.equal(shouldAutoIsolateMadmaxLaunch("launch", ["-wfeature"], {}), false);
     assert.equal(shouldAutoIsolateMadmaxLaunch("team", ["--madmax"], {}), false);
     assert.equal(shouldAutoIsolateMadmaxLaunch("launch", ["--yolo"], {}), false);
+  });
+
+  it("does not let stale inherited madmax env suppress top-level isolation", () => {
     assert.equal(
-      shouldAutoIsolateMadmaxLaunch("launch", ["--madmax"], { OMX_ROOT: "/already/boxed" }),
-      false,
+      shouldAutoIsolateMadmaxLaunch("launch", ["--madmax"], { OMX_ROOT: "/already/boxed" }, "/repo"),
+      true,
     );
     assert.equal(
-      shouldAutoIsolateMadmaxLaunch("launch", ["--madmax"], { OMXBOX_ACTIVE: "1" }),
-      false,
+      shouldAutoIsolateMadmaxLaunch("launch", ["--madmax"], { OMXBOX_ACTIVE: "1" }, "/repo"),
+      true,
     );
     assert.equal(
-      shouldAutoIsolateMadmaxLaunch("launch", ["--madmax"], { OMX_NO_BOX: "1" }),
+      shouldAutoIsolateMadmaxLaunch(
+        "launch",
+        ["--madmax"],
+        { OMX_STATE_ROOT: "/already/boxed-state" },
+        "/repo",
+      ),
+      true,
+    );
+    assert.equal(
+      shouldAutoIsolateMadmaxLaunch(
+        "launch",
+        ["--worktree"],
+        {
+          OMXBOX_ACTIVE: "1",
+          OMX_ROOT: "/old/root",
+          OMX_MADMAX_DETACHED_CONTEXT: "old-context",
+        },
+        "/repo",
+      ),
       false,
+    );
+  });
+
+  it("preserves active boxed detached context reuse when only the context is inherited", () => {
+    assert.equal(
+      shouldAutoIsolateMadmaxLaunch(
+        "launch",
+        ["--madmax", "--tmux"],
+        {
+          OMXBOX_ACTIVE: "1",
+          OMX_MADMAX_DETACHED_CONTEXT: "boxed-context-under-test",
+        },
+        "/repo",
+      ),
+      false,
+    );
+  });
+
+  it("preserves matching detached madmax child context reuse", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omx-madmax-source-"));
+    const runs = await mkdtemp(join(tmpdir(), "omx-madmax-runs-"));
+    try {
+      const env: NodeJS.ProcessEnv = { OMX_RUNS_DIR: runs };
+      const runDir = createMadmaxIsolatedRoot(wd, ["--madmax", "--high"], env);
+      env.OMX_ROOT = runDir;
+      env.OMXBOX_ACTIVE = "1";
+
+      assert.equal(
+        shouldAutoIsolateMadmaxLaunch("launch", ["--madmax", "--high"], env, wd),
+        false,
+      );
+      assert.equal(
+        shouldAutoIsolateMadmaxLaunch("launch", ["--madmax", "--xhigh"], env, wd),
+        true,
+        "changed launch semantics must not reuse an inherited boxed root",
+      );
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+      await rm(runs, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves explicit no-box behavior", () => {
+    assert.equal(
+      shouldAutoIsolateMadmaxLaunch("launch", ["--madmax"], { OMX_NO_BOX: "1" }, "/repo"),
+      false,
+    );
+  });
+
+  it("captures madmax worktree context from parsed worktree state, not remaining args", () => {
+    const sourceCwd = "/repo/source";
+    const worktreeCwd = "/repo/.worktrees/session";
+    const runDir = "/runs/run-issue-3043";
+    const context = captureMadmaxWorktreeRuntimeContext({
+      originalLaunchArgs: ["--madmax", "--worktree", "--version"],
+      worktreeEnabled: true,
+      sourceCwd,
+      worktreeCwd,
+      env: {
+        OMX_ROOT: runDir,
+        OMXBOX_ACTIVE: "1",
+        OMX_SOURCE_CWD: sourceCwd,
+        OMX_MADMAX_DETACHED_CONTEXT: "ctx-3043",
+      },
+    });
+
+    assert.deepEqual(context, {
+      omxRoot: runDir,
+      sourceCwd,
+      worktreeCwd,
+      madmaxDetachedContext: "ctx-3043",
+      boxedActive: true,
+    });
+  });
+
+  it("does not capture ordinary worktree or unboxed madmax launches", () => {
+    assert.equal(
+      captureMadmaxWorktreeRuntimeContext({
+        originalLaunchArgs: ["--worktree"],
+        worktreeEnabled: true,
+        sourceCwd: "/repo/source",
+        worktreeCwd: "/repo/.worktrees/session",
+        env: { OMX_ROOT: "/runs/run", OMXBOX_ACTIVE: "1" },
+      }),
+      undefined,
+    );
+    assert.equal(
+      captureMadmaxWorktreeRuntimeContext({
+        originalLaunchArgs: ["--madmax", "--worktree"],
+        worktreeEnabled: true,
+        sourceCwd: "/repo/source",
+        worktreeCwd: "/repo/.worktrees/session",
+        env: { OMX_ROOT: "/runs/run" },
+      }),
+      undefined,
+    );
+    assert.equal(
+      captureMadmaxWorktreeRuntimeContext({
+        originalLaunchArgs: ["--madmax", "--worktree"],
+        worktreeEnabled: false,
+        sourceCwd: "/repo/source",
+        worktreeCwd: "/repo/.worktrees/session",
+        env: { OMX_ROOT: "/runs/run", OMXBOX_ACTIVE: "1" },
+      }),
+      undefined,
     );
   });
 
@@ -458,6 +587,17 @@ describe("normalizeCodexLaunchArgs", () => {
       "-c",
       'model_reasoning_effort="xhigh"',
     ]);
+  });
+
+  it("rejects ambiguous max and ultra reasoning shorthands", () => {
+    assert.throws(
+      () => normalizeCodexLaunchArgs(["--max"]),
+      /canonical highest reasoning effort is "xhigh".*"max" and "ultra" are not accepted aliases/,
+    );
+    assert.throws(
+      () => normalizeCodexLaunchArgs(["--ultra"]),
+      /canonical highest reasoning effort is "xhigh".*"max" and "ultra" are not accepted aliases/,
+    );
   });
 
   it("maps --xhigh --madmax to codex-native flags only", () => {
@@ -896,6 +1036,47 @@ describe("cleanupPostLaunchModeStateFiles", () => {
       assert.deepEqual(sessionCanonical.active_skills, []);
     }
     assert.deepEqual(warnings, []);
+  });
+
+  it("normalizes stale terminal deep-interview locks during postLaunch cleanup", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omx-postlaunch-di-terminal-locks-"));
+    const sessionId = "sess-postlaunch-di-terminal-locks";
+    const sessionStateDir = join(wd, ".omx", "state", "sessions", sessionId);
+    const completedAt = "2026-07-09T00:00:00.000Z";
+
+    try {
+      await mkdir(sessionStateDir, { recursive: true });
+      await writeFile(
+        join(sessionStateDir, "deep-interview-state.json"),
+        JSON.stringify({
+          active: false,
+          mode: "deep-interview",
+          current_phase: "cancelled",
+          completed_at: completedAt,
+          input_lock: {
+            active: true,
+            owner: "stale-question",
+          },
+        }, null, 2),
+        "utf-8",
+      );
+
+      await cleanupPostLaunchModeStateFiles(wd, sessionId);
+
+      const deepInterview = JSON.parse(
+        await readFile(join(sessionStateDir, "deep-interview-state.json"), "utf-8"),
+      ) as Record<string, unknown>;
+      const inputLock = deepInterview.input_lock as Record<string, unknown>;
+
+      assert.equal(deepInterview.active, false);
+      assert.equal(deepInterview.current_phase, "cancelled");
+      assert.equal(deepInterview.completed_at, completedAt);
+      assert.equal(inputLock.active, false);
+      assert.equal(inputLock.status, "released");
+      assert.equal(inputLock.released_at, completedAt);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
   });
 
   it("does not preserve complete Ralph cleanup state without completion-audit evidence", async () => {
@@ -2189,7 +2370,7 @@ describe("project launch scope helpers", () => {
         join(wd, ".omx", "setup-scope.json"),
         JSON.stringify({ scope: "project" }),
       );
-      await writeFile(join(projectCodexHome, "config.toml"), 'model = "gpt-5.5"\n');
+      await writeFile(join(projectCodexHome, "config.toml"), 'model = "gpt-5.6-sol"\n');
       await writeFile(join(projectCodexHome, "state_5.sqlite"), "state db placeholder");
       await writeFile(join(projectCodexHome, "state_5.sqlite-wal"), "state db wal placeholder");
       await writeFile(join(projectCodexHome, "logs_2.sqlite-shm"), "logs db shm placeholder");
@@ -2313,7 +2494,7 @@ describe("project launch scope helpers", () => {
         JSON.stringify({ scope: "project" }),
       );
       const originalConfig = [
-        'model = "gpt-5.5"',
+        'model = "gpt-5.6-sol"',
         "",
         "[tui]",
         'status_line = ["model-with-reasoning", "git-branch"]',
@@ -2349,7 +2530,7 @@ describe("project launch scope helpers", () => {
 
       await writeFile(
         join(runtimeCodexHome, "config.toml"),
-        `${originalConfig}\n[tui.model_availability_nux]\n"gpt-5.5" = 1\n`,
+        `${originalConfig}\n[tui.model_availability_nux]\n"gpt-5.6-sol" = 1\n`,
       );
 
       assert.equal(await readFile(configPath, "utf-8"), originalConfig);
@@ -2374,13 +2555,13 @@ describe("project launch scope helpers", () => {
         join(wd, ".omx", "setup-scope.json"),
         JSON.stringify({ scope: "project" }),
       );
-      await writeFile(join(projectCodexHome, "config.toml"), 'model = "gpt-5.5"\n');
+      await writeFile(join(projectCodexHome, "config.toml"), 'model = "gpt-5.6-sol"\n');
 
       const prepared = await prepareCodexHomeForLaunch(wd, "session-auth", {});
       const runtimeCodexHome = runtimeCodexHomePath(wd, "session-auth");
       const opaqueAuthState = JSON.stringify({ token: "opaque-test-token" });
       await writeFile(join(runtimeCodexHome, "auth.json"), opaqueAuthState);
-      await writeFile(join(runtimeCodexHome, "config.toml"), 'model = "gpt-5.5"\n[tui.model_availability_nux]\n"gpt-5.5" = 1\n');
+      await writeFile(join(runtimeCodexHome, "config.toml"), 'model = "gpt-5.6-sol"\n[tui.model_availability_nux]\n"gpt-5.6-sol" = 1\n');
 
       await persistProjectLaunchRuntimeAuthState(
         prepared.runtimeCodexHomeForCleanup,
@@ -2388,7 +2569,7 @@ describe("project launch scope helpers", () => {
       );
 
       assert.equal(await readFile(join(projectCodexHome, "auth.json"), "utf-8"), opaqueAuthState);
-      assert.equal(await readFile(join(projectCodexHome, "config.toml"), "utf-8"), 'model = "gpt-5.5"\n');
+      assert.equal(await readFile(join(projectCodexHome, "config.toml"), "utf-8"), 'model = "gpt-5.6-sol"\n');
     } finally {
       await rm(wd, { recursive: true, force: true });
     }
@@ -2405,7 +2586,7 @@ describe("project launch scope helpers", () => {
         JSON.stringify({ scope: "project" }),
       );
       const originalProjectConfig = [
-        'model = "gpt-5.5"',
+        'model = "gpt-5.6-sol"',
         "",
         "[features]",
         "hooks = true",
@@ -2442,7 +2623,7 @@ describe("project launch scope helpers", () => {
           'trust_level = "trusted"',
           "",
           "[tui.model_availability_nux]",
-          '"gpt-5.5" = 1',
+          '"gpt-5.6-sol" = 1',
           "",
         ].join("\n"),
       );
@@ -2542,7 +2723,7 @@ describe("project launch scope helpers", () => {
       await writeFile(
         projectConfigPath,
         [
-          'model = "gpt-5.5"',
+          'model = "gpt-5.6-sol"',
           "",
           "[features]",
           "hooks = true",
@@ -2656,7 +2837,7 @@ describe("project launch scope helpers", () => {
         join(source, ".omx", "setup-scope.json"),
         JSON.stringify({ scope: "project" }),
       );
-      await writeFile(join(projectCodexHome, "config.toml"), 'model = "gpt-5.5"\n');
+      await writeFile(join(projectCodexHome, "config.toml"), 'model = "gpt-5.6-sol"\n');
 
       const prepared = await prepareCodexHomeForLaunch(source, "session-boxed", {});
       const runtimeCodexHome = runtimeCodexHomePath(source, "session-boxed");
@@ -2667,7 +2848,7 @@ describe("project launch scope helpers", () => {
       );
       assert.equal(prepared.codexHomeOverride, runtimeCodexHome);
       assert.equal(prepared.runtimeCodexHomeForCleanup, runtimeCodexHome);
-      assert.equal(await readFile(join(runtimeCodexHome, "config.toml"), "utf-8"), 'model = "gpt-5.5"\n');
+      assert.equal(await readFile(join(runtimeCodexHome, "config.toml"), "utf-8"), 'model = "gpt-5.6-sol"\n');
     } finally {
       if (typeof prevOmxRoot === "string") process.env.OMX_ROOT = prevOmxRoot;
       else delete process.env.OMX_ROOT;
@@ -2707,7 +2888,7 @@ describe("project launch scope helpers", () => {
         join(wd, ".omx", "setup-scope.json"),
         JSON.stringify({ scope: "project" }),
       );
-      await writeFile(join(wd, ".codex", "config.toml"), 'model = "gpt-5.5"\n');
+      await writeFile(join(wd, ".codex", "config.toml"), 'model = "gpt-5.6-sol"\n');
 
       const prepared = await prepareCodexHomeForLaunch(wd, "session-explicit-sqlite", {
         [CODEX_SQLITE_HOME_ENV]: "/tmp/explicit-sqlite-home",
@@ -3243,6 +3424,34 @@ describe("detached tmux new-session sequencing", () => {
     ]);
   });
 
+  it("buildDetachedSessionBootstrapSteps forwards inherited leader model separately from worker launch args", () => {
+    const steps = buildDetachedSessionBootstrapSteps(
+      "omx-demo",
+      "/tmp/project",
+      "'env' 'OMX_SESSION_ID=sess-detached-managed' 'codex' '--model' 'gpt-5.6-terra'",
+      "'node' '/tmp/omx.js' 'hud' '--watch'",
+      "--dangerously-bypass-approvals-and-sandbox --model gpt-5.6-terra",
+      "/tmp/project/.codex",
+      null,
+      false,
+      "sess-detached-managed",
+      undefined,
+      undefined,
+      undefined,
+      process.env,
+      undefined,
+      undefined,
+      "gpt-5.6-terra",
+    );
+    const newSession = steps.find((step) => step.name === "new-session");
+    assert.ok(newSession);
+    assert.equal(
+      newSession!.args.includes("-e") &&
+        newSession!.args.some((arg) => arg === "OMX_TEAM_WORKER_INHERITED_MODEL=gpt-5.6-terra"),
+      true,
+    );
+  });
+
   it("buildDetachedSessionBootstrapSteps forwards CODEX_HOME override to detached tmux session", () => {
     const steps = buildDetachedSessionBootstrapSteps(
       "omx-demo",
@@ -3742,10 +3951,10 @@ exit 0
 
   it("runCodex builds inside-tmux HUD command through explicit runtime-root resolver", async () => {
     const source = await readFile(join(repoRoot, 'src', 'cli', 'index.ts'), 'utf-8');
-    assert.match(source, /const hudRuntimeRoot = resolveHudRuntimeRootForLaunch\(cwd, process\.env\);/);
+    assert.match(source, /const hudRuntimeRoot: HudRuntimeRootForLaunch = runtimeContext\s*\? \{ omxRoot: runtimeContext\.omxRoot, rootSource: 'omx-root-env' \}\s*: resolveHudRuntimeRootForLaunch\(cwd, process\.env\);/);
     assert.match(
       source,
-      /const hudRuntimeEnv = buildHudRuntimeEnv\(\{\s*sessionId,\s*leaderPaneId: currentPaneId,\s*\.\.\.hudRuntimeRoot,\s*\}\)\.env;\s*const hudEnvArgs = Object\.entries\(hudRuntimeEnv\)\.map\(\(\[key, value\]\) => `\$\{key\}=\$\{value\}`\)/,
+      /const hudRuntimeEnv = \{\s*\.\.\.buildHudRuntimeEnv\(\{\s*sessionId,\s*leaderPaneId: currentPaneId,\s*\.\.\.hudRuntimeRoot,\s*\}\)\.env,\s*\.\.\.runtimeEnvOverlay,\s*\};\s*const hudEnvArgs = Object\.entries\(hudRuntimeEnv\)\.map\(\(\[key, value\]\) => `\$\{key\}=\$\{value\}`\)/,
     );
     assert.match(source, /if \(env\.OMX_TEAM_STATE_ROOT\?\.trim\(\)\) return 'team-env';\s*if \(env\.OMX_ROOT\?\.trim\(\) \|\| omxRootOverride\) return 'omx-root-env';\s*if \(env\.OMX_STATE_ROOT\?\.trim\(\)\) return 'omx-state-root-env';/);
     assert.match(
@@ -3758,7 +3967,7 @@ exit 0
     const source = await readFile(join(repoRoot, 'src', 'cli', 'index.ts'), 'utf-8');
     assert.match(
       source,
-      /registerInsideTmuxHudResizeHook\(\{\s*hudPaneId,\s*currentPaneId,\s*cwd,\s*sessionId,\s*omxRootOverride,\s*\}\)/,
+      /registerInsideTmuxHudResizeHook\(\{\s*hudPaneId,\s*currentPaneId,\s*cwd,\s*sessionId,\s*omxRootOverride,\s*baseEnv: runtimeHookEnv,\s*\}\)/,
     );
     assert.match(
       source,
@@ -5436,8 +5645,8 @@ describe("team worker launch arg inheritance helpers", () => {
 
   it("collectInheritableTeamWorkerArgs supports --model=<value> syntax", () => {
     assert.deepEqual(
-      collectInheritableTeamWorkerArgs(["--model=gpt-5.3-codex"]),
-      ["--model", "gpt-5.3-codex"],
+      collectInheritableTeamWorkerArgs(["--model=gpt-5.6-terra"]),
+      ["--model", "gpt-5.6-terra"],
     );
   });
 
@@ -5450,9 +5659,9 @@ describe("team worker launch arg inheritance helpers", () => {
         "-c",
         'model_provider="cheapRouter"',
         "--model",
-        "gpt-5.5",
+        "gpt-5.6-sol",
       ]),
-      ["-c", 'model_provider="cheapRouter"', "--model", "gpt-5.5"],
+      ["-c", 'model_provider="cheapRouter"', "--model", "gpt-5.6-sol"],
     );
   });
 
@@ -5492,10 +5701,10 @@ describe("team worker launch arg inheritance helpers", () => {
     assert.equal(
       resolveTeamWorkerLaunchArgsEnv(
         "--no-alt-screen",
-        ["--model=gpt-5.3-codex"],
+        ["--model=gpt-5.6-terra"],
         true,
       ),
-      "--no-alt-screen --model gpt-5.3-codex",
+      "--no-alt-screen --model gpt-5.6-terra",
     );
   });
 

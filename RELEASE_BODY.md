@@ -1,37 +1,34 @@
-# oh-my-codex 0.18.16
+# oh-my-codex 0.20.1
 
-> Draft status: release-prep PR body source before tagging. Keep publication proof updates in `docs/qa/release-readiness-0.18.16.md` after PR CI, tag workflow, GitHub release creation, and npm publication.
-
-`0.18.16` is a patch release after `0.18.15` focused on local-session diagnostics, stale HUD/Ralph guard cleanup, and safer doctor artifact ownership warnings. It preserves the existing CLI/package contract while tightening developer-facing failure reporting and stale-state behavior from the current `origin/dev` delta.
+`0.20.1` is a patch release for the reliability fixes in `v0.20.0..9eadab9f191103177fb3eac1b237188ada1f503c`.
 
 ## Highlights
 
-- **Local session friction reporting is available** — `omx session search` can surface local run/session friction signals so resume and debugging workflows have more actionable history.
-- **Stale HUD and Ralph continuation state is guarded** — HUD review status and Ralph Stop continuation handling avoid carrying stale review/stop signals across later workflow phases.
-- **Doctor artifact ownership diagnostics are safer** — `omx doctor` detects root-owned repository artifacts more clearly without over-warning on normal local files.
+- CRLF-safe generated `AGENTS.md` marker insertion (#3107).
+- Ralplan can write normalized direct-child Markdown draft artifacts under `.omx/drafts/` without relaxing the native planning-write boundary (#3110).
+- Fresh setup stops seeding legacy multi-agent and context-window defaults, leaving user-owned configuration and native role routing intact (#3111, #3115).
+- Stop hook responses remain schema-safe (#3114).
+- Conductor execution recognizes trusted delegated collaboration-child provenance while protecting leader and planning-boundary cases (#3117; issue #3116).
+- Native delegation detection handles incomplete capability inventories safely, and quoted Bash argument values no longer misparse as write targets (#3120; issue #3119).
 
-## Fixes and compatibility notes
+## Merged PRs since v0.20.0
 
-- The release remains a patch release: package layout, CLI entrypoint, plugin manifest shape, and Cargo workspace package contract are unchanged.
-- Root/package/plugin/Cargo metadata are bumped to `0.18.16`.
-- Session-search help and tests cover the local friction report surface.
-- Native Stop hook coverage guards against stale Ralph stop continuations.
+#3107 (CRLF generated AGENTS marker insertion), #3110 (Ralplan Markdown draft artifact writes), #3111 (legacy multi-agent default seeding), #3114 (schema-safe Stop responses), #3115 (legacy context-default seeding), #3117 (delegated collaboration-child provenance; issue #3116), #3120 (native delegation detection and quoted Bash target parsing; issue #3119).
 
-## Merged PR inventory
+## Prior-release collateral corrections
 
-- [#2970](https://github.com/Yeachan-Heo/oh-my-codex/pull/2970) — Add local session friction report.
-- [#2972](https://github.com/Yeachan-Heo/oh-my-codex/pull/2972) — Fix HUD stale review status.
-- [#2973](https://github.com/Yeachan-Heo/oh-my-codex/pull/2973) — Fix root-owned artifact warning in omx doctor.
-- [#2975](https://github.com/Yeachan-Heo/oh-my-codex/pull/2975) — Guard stale Ralph stop continuations.
+`f644d2cd3ae98587942aa94f0030f083ea0bb10f` corrected the 0.20.0 collateral compare coverage, and `5d43a5bf6f008de17f9425bee4495c457c60b96a` clarified that capabilities preflight is a manual command. These direct commits are prior-release collateral corrections, not 0.20.1 product headlines.
 
-## Validation evidence
+## Compatibility
 
-Release readiness evidence is recorded in `docs/qa/release-readiness-0.18.16.md`.
+Patch release with no intentional breaking CLI or package-layout changes.
 
-Release-prep gates include version sync for `v0.18.16`, build, native-agent verification, plugin mirror/bundle checks, catalog docs check, targeted regression tests for doctor/session-search/HUD/native-hook/session friction, `npm pack --dry-run`, and `git diff --check`. Branch CI, dev/main promotion, tag-triggered release workflow, GitHub release proof, and npm publication proof remain publication-stage gates.
+## Validation
+
+The pre-tag command gates, evidence schema, and pending external CI/publication evidence are declared in `docs/qa/release-readiness-0.20.1.md`. No local gate, review, CI, tag, or publication result is asserted here.
 
 ## Contributors
 
-Thanks to [@Yeachan-Heo](https://github.com/Yeachan-Heo) and [@iqdoctor](https://github.com/iqdoctor) for contributing to this release.
+Thanks to the contributors who made this release possible.
 
-**Full Changelog**: [`v0.18.15...v0.18.16`](https://github.com/Yeachan-Heo/oh-my-codex/compare/v0.18.15...v0.18.16)
+**Full Changelog**: [`v0.20.0...v0.20.1`](https://github.com/Yeachan-Heo/oh-my-codex/compare/v0.20.0...v0.20.1)
